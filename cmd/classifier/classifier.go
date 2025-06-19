@@ -8,6 +8,8 @@ import (
 	"log"
 	"math"
 	"os"
+	"runtime"
+	"sync"
 
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
@@ -87,6 +89,18 @@ func main() {
 		Eta_d.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 	}
 
+	// Создаем пул воркеров
+	numWorkers := runtime.NumCPU() // Используем все доступные ядра
+	taskQueue := make(chan task, cfg.NumPoints)
+	resultQueue := make(chan []float64, cfg.NumPoints)
+
+	// Запускаем воркеры
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(taskQueue, resultQueue, &wg)
+	}
+
 	// Main processing loop
 	for i := 0; i < r; i++ {
 		fmt.Printf("Row = %d\n", i)
@@ -94,40 +108,45 @@ func main() {
 			delta_meas := depolarizationMatrix.At(i, j) / 100.0
 			GF_meas := fluorescenceCapacityMatrix.At(i, j)
 
-			// Temporary storage for averaging
-			tmp_eta := make([][]float64, cfg.NumPoints)
-			validPoints := 0
-
+			// Отправляем задачи воркерам
 			for k := 0; k < cfg.NumPoints; k++ {
-				GF_u_k := gfUs[k]
-				GF_d_k := gfDs[k]
-				GF_s_k := gfSs[k]
-				delta_u_k := delta_us[k]
-				delta_d_k := delta_ds[k]
-				delta_s_k := delta_ss[k]
-
-				ntas_i, err := classifySinglePoint(GF_meas, delta_meas/(1+delta_meas),
-					GF_u_k, GF_d_k, GF_s_k, delta_u_k, delta_d_k, delta_s_k)
-
-				// Проверка на допустимость решения
-				if err == nil && isValidSolution(ntas_i) {
-					tmp_eta[validPoints] = ntas_i
-					validPoints++
+				taskQueue <- task{
+					GF_meas:    GF_meas,
+					delta_meas: delta_meas,
+					GF_u_k:     gfUs[k],
+					GF_d_k:     gfDs[k],
+					GF_s_k:     gfSs[k],
+					delta_u_k:  delta_us[k],
+					delta_d_k:  delta_ds[k],
+					delta_s_k:  delta_ss[k],
 				}
 			}
 
-			if validPoints == 0 {
+			// Собираем результаты
+			tmp_eta := make([][]float64, 0, cfg.NumPoints)
+			for k := 0; k < cfg.NumPoints; k++ {
+				res := <-resultQueue
+				if res != nil { // nil означает недопустимое решение
+					tmp_eta = append(tmp_eta, res)
+				}
+			}
+
+			if len(tmp_eta) == 0 {
 				fmt.Printf("Warning: no valid solutions for point (%d,%d)\n", i, j)
 				continue
 			}
 
 			// Average the valid estimates
-			etas_mean := averageVectors(tmp_eta[:validPoints])
+			etas_mean := averageVectors(tmp_eta)
 			Eta_u.Set(i, j, etas_mean[0])
 			Eta_d.Set(i, j, etas_mean[1])
 			Eta_s.Set(i, j, etas_mean[2])
 		}
 	}
+
+	// Завершаем работу воркеров
+	close(taskQueue)
+	wg.Wait()
 
 	err = saveMatrix(cfg.InputDir+"Eta_s.csv", Eta_s)
 	if err != nil {
@@ -148,6 +167,33 @@ func main() {
 	makePlot(Eta_s, "Eta_s", cfg.InputDir+"Eta_s.pdf")
 	//_ = fluorescenceCapacityMatrix
 	//_ = depolarizationMatrix
+}
+
+// Структура задачи для воркера
+type task struct {
+	GF_meas    float64
+	delta_meas float64
+	GF_u_k     float64
+	GF_d_k     float64
+	GF_s_k     float64
+	delta_u_k  float64
+	delta_d_k  float64
+	delta_s_k  float64
+}
+
+// Функция воркера
+func worker(tasks <-chan task, results chan<- []float64, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for t := range tasks {
+		ntas_i, err := classifySinglePoint(t.GF_meas, t.delta_meas/(1+t.delta_meas),
+			t.GF_u_k, t.GF_d_k, t.GF_s_k, t.delta_u_k, t.delta_d_k, t.delta_s_k)
+
+		if err == nil && isValidSolution(ntas_i) {
+			results <- ntas_i
+		} else {
+			results <- nil
+		}
+	}
 }
 
 // Проверка, что решение находится в допустимых пределах [0;1]
@@ -293,8 +339,8 @@ func saveMatrix(filename string, m mat.Matrix) error {
 func makePlot(data *mat.Dense, title, filename string) {
 	p := plot.New()
 	p.Title.Text = title
-	p.X.Label.Text = "Время"
-	p.Y.Label.Text = "Altitude"
+	p.X.Label.Text = "Time, (profile no)"
+	p.Y.Label.Text = "Altitude, (m)"
 
 	pal := palette.Rainbow(10, palette.Blue, palette.Red, 1, 1, 1)
 	heatmap := plotter.NewHeatMap(

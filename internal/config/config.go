@@ -8,6 +8,9 @@ type Config struct {
 	VariationCoefficient             float64
 	InputDir                         string
 	NumPoints                        int
+	DoSmooth                         bool
+	SigmaH, SigmaT                   int // numer of temporal and spatial bins
+	Size                             int // kernel size
 }
 
 func Parse() *Config {
@@ -23,6 +26,10 @@ func Parse() *Config {
 	flag.Float64Var(&cfg.VariationCoefficient, "var-coef", 0.1, "variation coefficient for aerosol parameters")
 	flag.StringVar(&cfg.InputDir, "input-dir", "./", "input directory")
 	flag.IntVar(&cfg.NumPoints, "num-points", 100, "number of data points to simulate")
+	flag.BoolVar(&cfg.DoSmooth, "smooth", false, "apply smoothing to the data")
+	flag.IntVar(&cfg.SigmaH, "sigma-h", 5, "spatial smoothing size in bins")
+	flag.IntVar(&cfg.SigmaT, "sigma-t", 3, "temporal smoothing size in bins")
+	flag.IntVar(&cfg.Size, "size", 7, "kernel size in bins")
 	flag.Parse()
 
 	return cfg

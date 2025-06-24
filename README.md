@@ -79,6 +79,15 @@ Usage of ./classifier:
     	number of data points to simulate (default 100)
   -var-coef float
     	variation coefficient for aerosol parameters (default 0.1)
+  -sigma-h int
+    	spatial smoothing size in bins (default 5)
+  -sigma-t int
+    	temporal smoothing size in bins (default 3)
+  -size int
+    	kernel size in bins (default 7)
+  -smooth
+    	apply smoothing to the data
+
 ```
 
 ## ВАЖНО

@@ -93,7 +93,7 @@ func main() {
 	Eta_d := mat.NewDense(r, c, nil)
 
 	// Copy first column (time/altitude)
-	for i := 0; i < r; i++ {
+	for i := range r {
 		Eta_u.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 		Eta_s.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 		Eta_d.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
@@ -106,7 +106,7 @@ func main() {
 
 	// Запускаем воркеры
 	var wg sync.WaitGroup
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Add(1)
 		go worker(taskQueue, resultQueue, &wg)
 	}
@@ -119,7 +119,7 @@ func main() {
 			GF_meas := fluorescenceCapacityMatrix.At(i, j)
 
 			// Отправляем задачи воркерам
-			for k := 0; k < cfg.NumPoints; k++ {
+			for k := range cfg.NumPoints {
 				taskQueue <- task{
 					GF_meas:    GF_meas,
 					delta_meas: delta_meas,

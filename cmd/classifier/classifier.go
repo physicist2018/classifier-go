@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"slices"
 	"sync"
 
 	"gonum.org/v1/gonum/floats"
@@ -35,6 +36,7 @@ func main() {
 	tmpSlice := depolarizationMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
 	tmpSlice.Scale(0.01, tmpSlice)
 
+	// Если нужно сглаживание, то применяем фильтр Гаусса
 	if cfg.DoSmooth {
 		gs := convolve.NewGaussianKernel(float64(cfg.SigmaT), float64(cfg.SigmaH), cfg.Size)
 		r := depolarizationMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
@@ -46,6 +48,7 @@ func main() {
 		r.Copy(output)
 	}
 
+	// переводим реперные значения деполяризации для исключения появления ошибки деления на ноль
 	delta_d := cfg.DeltaDust / (1.0 + cfg.DeltaDust)
 	delta_u := cfg.DeltaUrban / (1.0 + cfg.DeltaUrban)
 	delta_s := cfg.DeltaSoot / (1.0 + cfg.DeltaSoot)
@@ -102,7 +105,7 @@ func main() {
 	// Создаем пул воркеров
 	numWorkers := runtime.NumCPU() // Используем все доступные ядра
 	taskQueue := make(chan task, cfg.NumPoints)
-	resultQueue := make(chan []float64, cfg.NumPoints)
+	resultQueue := make(chan result, cfg.NumPoints)
 
 	// Запускаем воркеры
 	var wg sync.WaitGroup
@@ -133,10 +136,10 @@ func main() {
 			}
 
 			// Собираем результаты
-			tmp_eta := make([][]float64, 0, cfg.NumPoints)
+			tmp_eta := make([]result, 0, cfg.NumPoints)
 			for k := 0; k < cfg.NumPoints; k++ {
 				res := <-resultQueue
-				if res != nil { // nil означает недопустимое решение
+				if res.Valid { // nil означает недопустимое решение
 					tmp_eta = append(tmp_eta, res)
 				}
 			}
@@ -147,7 +150,7 @@ func main() {
 			}
 
 			// Average the valid estimates
-			etas_mean := averageVectors(tmp_eta)
+			etas_mean := averageVectors(tmp_eta, 0.1)
 			Eta_u.Set(i, j, etas_mean[0])
 			Eta_d.Set(i, j, etas_mean[1])
 			Eta_s.Set(i, j, etas_mean[2])
@@ -192,17 +195,28 @@ type task struct {
 	delta_s_k  float64
 }
 
+// Структура для хранения результатов
+type result struct {
+	X     []float64
+	F     float64
+	Valid bool
+}
+
 // Функция воркера
-func worker(tasks <-chan task, results chan<- []float64, wg *sync.WaitGroup) {
+func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for t := range tasks {
-		ntas_i, err := classifySinglePoint(t.GF_meas, t.delta_meas/(1+t.delta_meas),
+		ntas_i, F_i, err := classifySinglePoint(t.GF_meas, t.delta_meas/(1+t.delta_meas),
 			t.GF_u_k, t.GF_d_k, t.GF_s_k, t.delta_u_k, t.delta_d_k, t.delta_s_k)
 
 		if err == nil && isValidSolution(ntas_i) {
-			results <- ntas_i
+			results <- result{
+				X:     ntas_i,
+				F:     F_i,
+				Valid: true,
+			}
 		} else {
-			results <- nil
+			results <- result{Valid: false}
 		}
 	}
 }
@@ -217,7 +231,7 @@ func isValidSolution(x []float64) bool {
 	return true
 }
 
-func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d, delta_s float64) ([]float64, error) {
+func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d, delta_s float64) ([]float64, float64, error) {
 	residual := func(x []float64) []float64 {
 		nu, nd, ns := x[0], x[1], x[2]
 
@@ -286,7 +300,7 @@ func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d
 	result, err := optimize.Minimize(problem, initialGuess, settings, method)
 	//fmt.Println(result.Stats.FuncEvaluations)
 	if err != nil {
-		return nil, fmt.Errorf("optimization failed: %v", err)
+		return nil, 0, fmt.Errorf("optimization failed: %v", err)
 	}
 
 	// Дополнительная проверка границ
@@ -296,27 +310,42 @@ func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d
 
 	// Проверка суммы параметров (должна быть близка к 1)
 	sum := floats.Sum(result.X)
-	if math.Abs(sum-1) > 0.1 { // Допустимое отклонение 10%
-		return nil, fmt.Errorf("invalid solution: sum of parameters = %f", sum)
+	if math.Abs(sum-1) > 0.01 { // Допустимое отклонение 1%
+		return nil, 0, fmt.Errorf("invalid solution: sum of parameters = %f", sum)
 	}
 
-	return result.X, nil
+	return result.X, result.F, nil
 }
 
-func averageVectors(vectors [][]float64) []float64 {
+func averageVectors(vectors []result, avgFrac float64) []float64 {
 	if len(vectors) == 0 {
 		return []float64{0, 0, 0}
 	}
 
+	// filtered_vectors := Filter(vectors, func(v result) bool {
+	// 	return v.Valid
+	// })
+
+	slices.SortFunc(vectors, func(a result, b result) int {
+		if a.F < b.F {
+			return -1
+		} else if a.F > b.F {
+			return 1
+		} else {
+			return 0
+		}
+	})
+
 	sum := make([]float64, 3)
-	for _, v := range vectors {
-		for i := range v {
-			sum[i] += v[i]
+	Ntot := int(float64(len(vectors)) * avgFrac)
+	for i := 0; i < Ntot; i++ {
+		for j := range vectors[i].X {
+			sum[j] += vectors[i].X[j]
 		}
 	}
-
+	println(vectors[0].F, vectors[Ntot-1].F)
 	for i := range sum {
-		sum[i] /= float64(len(vectors))
+		sum[i] /= float64(Ntot)
 	}
 	return sum
 }
@@ -345,4 +374,18 @@ func saveMatrix(filename string, m mat.Matrix) error {
 	}
 
 	return nil
+}
+
+// Predicate — функция-предикат, определяющая условие фильтрации
+type Predicate[T any] func(T) bool
+
+// Filter — фильтрует срез, оставляя только элементы, удовлетворяющие предикату
+func Filter[T any](src []T, pred Predicate[T]) []T {
+	var filtered []T
+	for _, item := range src {
+		if pred(item) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

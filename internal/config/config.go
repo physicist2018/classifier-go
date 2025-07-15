@@ -10,7 +10,8 @@ type Config struct {
 	NumPoints                        int
 	DoSmooth                         bool
 	SigmaH, SigmaT                   int // numer of temporal and spatial bins
-	Size                             int // kernel size
+	Size                             int // kernel size in bins
+	AvgPercent                       float64
 }
 
 func Parse() *Config {
@@ -30,6 +31,7 @@ func Parse() *Config {
 	flag.IntVar(&cfg.SigmaH, "sigma-h", 5, "spatial smoothing size in bins")
 	flag.IntVar(&cfg.SigmaT, "sigma-t", 3, "temporal smoothing size in bins")
 	flag.IntVar(&cfg.Size, "size", 7, "kernel size in bins")
+	flag.Float64Var(&cfg.AvgPercent, "avg-percent", 0.1, "percentage of data to average")
 	flag.Parse()
 
 	return cfg

@@ -56,32 +56,32 @@ func main() {
 	// Generate random values
 	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficient)
 	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficient)
-	genGfUrban := randomnormal.NewNormalRandGenerator(cfg.GfUrban, (gfuMax-gfuMin)/6, gfuMin, gfuMax)
+	genGfUrban := randomnormal.NewNormalRandGenerator(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
 	gfUs := genGfUrban.RandN(cfg.NumPoints)
 
 	gfsMin := cfg.GfSoot * (1.0 - cfg.VariationCoefficient)
 	gfsMax := cfg.GfSoot * (1.0 + cfg.VariationCoefficient)
-	genGfSoot := randomnormal.NewNormalRandGenerator(cfg.GfSoot, (gfsMax-gfsMin)/6, gfsMin, gfsMax)
+	genGfSoot := randomnormal.NewNormalRandGenerator(cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
 	gfSs := genGfSoot.RandN(cfg.NumPoints)
 
 	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficient)
 	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficient)
-	genGfDust := randomnormal.NewNormalRandGenerator(cfg.GfDust, (gfdMax-gfdMin)/6, gfdMin, gfdMax)
+	genGfDust := randomnormal.NewNormalRandGenerator(cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax)
 	gfDs := genGfDust.RandN(cfg.NumPoints)
 
 	delta_s_min := delta_s * (1.0 - cfg.VariationCoefficient)
 	delta_s_max := delta_s * (1.0 + cfg.VariationCoefficient)
-	genDeltaSoot := randomnormal.NewNormalRandGenerator(delta_s, (delta_s_max-delta_s_min)/6, delta_s_min, delta_s_max)
+	genDeltaSoot := randomnormal.NewNormalRandGenerator(delta_s, (delta_s_max-delta_s_min)/4, delta_s_min, delta_s_max)
 	delta_ss := genDeltaSoot.RandN(cfg.NumPoints)
 
 	delta_u_min := delta_u * (1.0 - cfg.VariationCoefficient)
 	delta_u_max := delta_u * (1.0 + cfg.VariationCoefficient)
-	genDeltaUrban := randomnormal.NewNormalRandGenerator(delta_u, (delta_u_max-delta_u_min)/6, delta_u_min, delta_u_max)
+	genDeltaUrban := randomnormal.NewNormalRandGenerator(delta_u, (delta_u_max-delta_u_min)/4, delta_u_min, delta_u_max)
 	delta_us := genDeltaUrban.RandN(cfg.NumPoints)
 
 	delta_d_min := delta_d * (1.0 - cfg.VariationCoefficient)
 	delta_d_max := delta_d * (1.0 + cfg.VariationCoefficient)
-	genDeltaDust := randomnormal.NewNormalRandGenerator(delta_d, (delta_d_max-delta_d_min)/6, delta_d_min, delta_d_max)
+	genDeltaDust := randomnormal.NewNormalRandGenerator(delta_d, (delta_d_max-delta_d_min)/4, delta_d_min, delta_d_max)
 	delta_ds := genDeltaDust.RandN(cfg.NumPoints)
 
 	r, c := fluorescenceCapacityMatrix.Dims()
@@ -114,6 +114,8 @@ func main() {
 		go worker(taskQueue, resultQueue, &wg)
 	}
 
+	newGf := make([]float64, 3)
+	newDelta := make([]float64, 3)
 	// Main processing loop
 	for i := 0; i < r; i++ {
 		fmt.Printf("Row = %d\n", i)
@@ -151,10 +153,24 @@ func main() {
 
 			// Average the valid estimates
 			etas_mean := averageVectors(tmp_eta, 0.1)
-			Eta_u.Set(i, j, etas_mean[0])
-			Eta_d.Set(i, j, etas_mean[1])
-			Eta_s.Set(i, j, etas_mean[2])
+			Eta_u.Set(i, j, etas_mean[0].X)
+			Eta_d.Set(i, j, etas_mean[1].X)
+			Eta_s.Set(i, j, etas_mean[2].X)
+
+			newGf[0] += etas_mean[0].Gf
+			newGf[1] += etas_mean[1].Gf
+			newGf[2] += etas_mean[2].Gf
+
+			newDelta[0] += (etas_mean[0].Delta / (1 - etas_mean[0].Delta))
+			newDelta[1] += (etas_mean[1].Delta / (1 - etas_mean[1].Delta))
+			newDelta[2] += (etas_mean[2].Delta / (1 - etas_mean[2].Delta))
 		}
+	}
+
+	nAvg := r * (c - 1)
+	for i := range 3 {
+		newGf[i] /= float64(nAvg)
+		newDelta[i] /= float64(nAvg)
 	}
 
 	// Завершаем работу воркеров
@@ -179,6 +195,11 @@ func main() {
 	heatmapplotter.MakeHeatmapPlot(Eta_d, "Eta_d", cfg.InputDir+"Eta_d.pdf")
 	heatmapplotter.MakeHeatmapPlot(Eta_u, "Eta_u", cfg.InputDir+"Eta_u.pdf")
 	heatmapplotter.MakeHeatmapPlot(Eta_s, "Eta_s", cfg.InputDir+"Eta_s.pdf")
+
+	fmt.Println("Tuned parameters:")
+	fmt.Printf("Gf_u: %.3e, delta_u: %.3f\n", newGf[0], newDelta[0])
+	fmt.Printf("Gf_d: %.3e, delta_d: %.3f\n", newGf[1], newDelta[1])
+	fmt.Printf("Gf_s: %.3e, delta_s: %.3f\n", newGf[2], newDelta[2])
 	//_ = fluorescenceCapacityMatrix
 	//_ = depolarizationMatrix
 }
@@ -199,7 +220,15 @@ type task struct {
 type result struct {
 	X     []float64
 	F     float64
+	Gf    [3]float64 //Gfd, Gfu, Gfs
+	Delta [3]float64 //Deltad. Deltau, Deltas
 	Valid bool
+}
+
+type avgresult struct {
+	X     float64
+	Delta float64
+	Gf    float64
 }
 
 // Функция воркера
@@ -213,6 +242,8 @@ func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 			results <- result{
 				X:     ntas_i,
 				F:     F_i,
+				Gf:    [3]float64{t.GF_u_k, t.GF_d_k, t.GF_s_k},
+				Delta: [3]float64{t.delta_u_k, t.delta_d_k, t.delta_s_k},
 				Valid: true,
 			}
 		} else {
@@ -317,9 +348,9 @@ func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d
 	return result.X, result.F, nil
 }
 
-func averageVectors(vectors []result, avgFrac float64) []float64 {
+func averageVectors(vectors []result, avgFrac float64) []avgresult {
 	if len(vectors) == 0 {
-		return []float64{0, 0, 0}
+		return []avgresult{}
 	}
 
 	// filtered_vectors := Filter(vectors, func(v result) bool {
@@ -336,16 +367,20 @@ func averageVectors(vectors []result, avgFrac float64) []float64 {
 		}
 	})
 
-	sum := make([]float64, 3)
+	sum := make([]avgresult, 3)
 	Ntot := int(float64(len(vectors)) * avgFrac)
 	for i := 0; i < Ntot; i++ {
 		for j := range vectors[i].X {
-			sum[j] += vectors[i].X[j]
+			sum[j].X += vectors[i].X[j]
+			sum[j].Gf += vectors[i].Gf[j]
+			sum[j].Delta += vectors[i].Delta[j]
 		}
 	}
 	//println(vectors[0].F, vectors[Ntot-1].F)
 	for i := range sum {
-		sum[i] /= float64(Ntot)
+		sum[i].Delta /= float64(Ntot)
+		sum[i].Gf /= float64(Ntot)
+		sum[i].X /= float64(Ntot)
 	}
 	return sum
 }

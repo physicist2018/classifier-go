@@ -343,7 +343,7 @@ func averageVectors(vectors []result, avgFrac float64) []float64 {
 			sum[j] += vectors[i].X[j]
 		}
 	}
-	println(vectors[0].F, vectors[Ntot-1].F)
+	//println(vectors[0].F, vectors[Ntot-1].F)
 	for i := range sum {
 		sum[i] /= float64(Ntot)
 	}

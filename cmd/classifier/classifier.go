@@ -95,11 +95,24 @@ func main() {
 	Eta_s := mat.NewDense(r, c, nil)
 	Eta_d := mat.NewDense(r, c, nil)
 
+	Gf_u_n := mat.NewDense(r, c, nil)
+	Gf_d_n := mat.NewDense(r, c, nil)
+	Gf_s_n := mat.NewDense(r, c, nil)
+	Delta_u_n := mat.NewDense(r, c, nil)
+	Delta_d_n := mat.NewDense(r, c, nil)
+	Delta_s_n := mat.NewDense(r, c, nil)
+
 	// Copy first column (time/altitude)
 	for i := range r {
 		Eta_u.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 		Eta_s.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 		Eta_d.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Gf_u_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Gf_d_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Gf_s_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Delta_u_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Delta_d_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+		Delta_s_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
 	}
 
 	// Создаем пул воркеров
@@ -157,6 +170,13 @@ func main() {
 			Eta_d.Set(i, j, etas_mean[1].X)
 			Eta_s.Set(i, j, etas_mean[2].X)
 
+			Delta_u_n.Set(i, j, etas_mean[0].Delta)
+			Delta_d_n.Set(i, j, etas_mean[1].Delta)
+			Delta_s_n.Set(i, j, etas_mean[2].Delta)
+			Gf_u_n.Set(i, j, etas_mean[0].Gf)
+			Gf_d_n.Set(i, j, etas_mean[1].Gf)
+			Gf_s_n.Set(i, j, etas_mean[2].Gf)
+
 			newGf[0] += etas_mean[0].Gf
 			newGf[1] += etas_mean[1].Gf
 			newGf[2] += etas_mean[2].Gf
@@ -190,6 +210,41 @@ func main() {
 	err = saveMatrix(cfg.InputDir+"Eta_d.csv", Eta_d)
 	if err != nil {
 		log.Fatal("Error saving Eta_d matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Gf_u.csv", Gf_u_n)
+	if err != nil {
+		log.Fatal("Error saving Gf_u_n matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Gf_d.csv", Gf_d_n)
+	if err != nil {
+		log.Fatal("Error saving Gf_d_n matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Gf_s.csv", Gf_s_n)
+	if err != nil {
+		log.Fatal("Error saving Gf_s_n matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Delta_u.csv", Delta_u_n)
+	if err != nil {
+		log.Fatal("Error saving Delta_u matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Delta_d.csv", Delta_d_n)
+	if err != nil {
+		log.Fatal("Error saving Delta_d matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Delta_s.csv", Delta_s_n)
+	if err != nil {
+		log.Fatal("Error saving Delta_s matrix", err)
+	}
+
+	err = saveMatrix(cfg.InputDir+"Gf_s.csv", Gf_s_n)
+	if err != nil {
+		log.Fatal("Error saving Gf_s_n matrix", err)
 	}
 	heatmapplotter.MakeHeatmapPlot(depolarizationMatrix, "Dep", cfg.InputDir+"Dep.pdf")
 	heatmapplotter.MakeHeatmapPlot(Eta_d, "Eta_d", cfg.InputDir+"Eta_d.pdf")
@@ -403,7 +458,7 @@ func saveMatrix(filename string, m mat.Matrix) error {
 			if j > 0 {
 				f.WriteString("\t") // Используем табуляцию как разделитель
 			}
-			fmt.Fprintf(f, "%.4f", m.At(i, j))
+			fmt.Fprintf(f, "%.4e", m.At(i, j))
 		}
 		f.WriteString("\n") // Переход на новую строку
 	}

@@ -168,7 +168,7 @@ func main() {
 			}
 
 			// Average the valid estimates
-			etas_mean := averageVectors(tmp_eta, 0.1)
+			etas_mean := averageVectors(tmp_eta, cfg.AvgPercent)
 			Eta_u.Set(i, j, etas_mean[0].X)
 			Eta_d.Set(i, j, etas_mean[1].X)
 			Eta_s.Set(i, j, etas_mean[2].X)
@@ -410,10 +410,6 @@ func averageVectors(vectors []result, avgFrac float64) []avgresult {
 	if len(vectors) == 0 {
 		return []avgresult{}
 	}
-
-	// filtered_vectors := Filter(vectors, func(v result) bool {
-	// 	return v.Valid
-	// })
 
 	slices.SortFunc(vectors, func(a result, b result) int {
 		if a.F < b.F {

@@ -197,6 +197,8 @@ func processDataPoints(
 	)
 
 	for i := 0; i < r; i++ {
+		fmt.Print("\033[1A")
+		fmt.Print("\033[K")
 		fmt.Printf("Processing row %d/%d\n", i+1, r)
 		for j := 1; j < c; j++ {
 			gfMeas := flMatrix.At(i, j)

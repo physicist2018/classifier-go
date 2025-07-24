@@ -50,7 +50,7 @@ func main() {
 
 	// Generate parameter distributions
 	gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs := generateParameterDistributions(cfg, deltaD, deltaU, deltaS)
-	saveArraysToCSV(cfg.InputDir+"rand.csv", gfUs, deltaUs, gfDs, deltaDs, gfSs, deltaSs)
+	saveArraysToCSV(filepath.Join(cfg.InputDir, "rand.csv"), gfUs, deltaUs, gfDs, deltaDs, gfSs, deltaSs)
 
 	// Initialize result matrices
 	resultMats := initializeResultMatrices(flMatrix)

@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	gonum.org/v1/gonum v0.16.0
 	gonum.org/v1/plot v0.15.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

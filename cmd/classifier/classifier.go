@@ -11,6 +11,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
@@ -31,12 +32,12 @@ func main() {
 	log.Println("Starting classifier...")
 
 	// Load input matrices
-	flMatrix, err := readmatrix.ReadMatrix(cfg.InputDir + "FL_cap.txt")
+	flMatrix, err := readmatrix.ReadMatrix(filepath.Join(cfg.InputDir, "FL_cap.txt"))
 	if err != nil {
 		log.Fatal("Error reading Fluorescence Capacity Matrix:", err)
 	}
 
-	depMatrix, err := readmatrix.ReadMatrix(cfg.InputDir + "Dep.txt")
+	depMatrix, err := readmatrix.ReadMatrix(filepath.Join(cfg.InputDir, "Dep.txt"))
 	if err != nil {
 		log.Fatal("Error reading Depolarization Matrix:", err)
 	}
@@ -478,7 +479,7 @@ func averageVectors(vectors []result, avgFrac float64) []avgresult {
 
 func saveResults(outputDir string, m *ResultMatrices) {
 	save := func(name string, matrix *mat.Dense) {
-		if err := saveMatrix(outputDir+name, matrix); err != nil {
+		if err := saveMatrix(filepath.Join(outputDir, name), matrix); err != nil {
 			log.Printf("Error saving %s: %v", name, err)
 		}
 	}
@@ -519,17 +520,17 @@ func generateHeatmaps(outputDir string, depMatrix *mat.Dense, m *ResultMatrices)
 		heatmapplotter.MakeHeatmapPlot(matrix, name, path)
 	}
 
-	plot("Depolarization", outputDir+"Dep.pdf", depMatrix)
-	plot("Eta Urban", outputDir+"Eta_u.pdf", m.EtaU)
-	plot("Eta Dust", outputDir+"Eta_d.pdf", m.EtaD)
-	plot("Eta Soot", outputDir+"Eta_s.pdf", m.EtaS)
+	plot("Depolarization", filepath.Join(outputDir, "Dep.pdf"), depMatrix)
+	plot("Eta Urban", filepath.Join(outputDir, "Eta_u.pdf"), m.EtaU)
+	plot("Eta Dust", filepath.Join(outputDir, "Eta_d.pdf"), m.EtaD)
+	plot("Eta Soot", filepath.Join(outputDir, "Eta_s.pdf"), m.EtaS)
 }
 
 func printFinalResults(newGf, newDelta [3]float64) {
 	fmt.Println("\n=== Final Tuned Parameters ===")
 	fmt.Printf("Urban aerosol: Gf = %.3e, δ = %.3f\n", newGf[0], newDelta[0])
-	fmt.Printf("Dust:          Gf = %.3e, δ = %.3f\n", newGf[1], newDelta[1])
-	fmt.Printf("Soot:          Gf = %.3e, δ = %.3f\n", newGf[2], newDelta[2])
+	fmt.Printf("Dust  aerosol: Gf = %.3e, δ = %.3f\n", newGf[1], newDelta[1])
+	fmt.Printf("Soot  aerosol: Gf = %.3e, δ = %.3f\n", newGf[2], newDelta[2])
 }
 
 func saveArraysToCSV(filename string, arrs ...[]float64) error {

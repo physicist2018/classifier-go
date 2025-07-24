@@ -1,0 +1,15 @@
+go.sum
+.DS_Store
+*.exe
+*.dat
+*.pdf
+*.csv
+examples/*
+cmd/classifier/classifier
+cmd/convolve2D/convolve2D
+cmd/gaussclassifier/gaussclassifier
+cmd/normaldist/normaldist
+cmd/random/random
+cmd/readmatrix/readmatrix
+cmd/testcolorbar/testcolorbar
+

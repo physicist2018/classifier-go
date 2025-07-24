@@ -20,249 +20,332 @@ import (
 	"gonum.org/v1/gonum/optimize"
 )
 
+// Constants
+const (
+	penaltyCoefficient = 1000
+	convergenceTol     = 1e-4
+	maxIterations      = 100
+)
+
 func main() {
+	// Load configuration
 	cfg := config.Parse()
+	log.Println("Starting classifier...")
 
-	log.Println("Starting...")
-
+	// Load and process input matrices
 	fluorescenceCapacityMatrix, err := readmatrix.ReadMatrix(cfg.InputDir + "FL_cap.txt")
 	if err != nil {
-		log.Fatal("Error reading Fluorescence Capacity Matrix", err)
+		log.Fatal("Error reading Fluorescence Capacity Matrix:", err)
 	}
+
 	depolarizationMatrix, err := readmatrix.ReadMatrix(cfg.InputDir + "Dep.txt")
 	if err != nil {
-		log.Fatal("Error reading depolarization Matrix", err)
-	}
-	rows, cols := depolarizationMatrix.Dims()
-	tmpSlice := depolarizationMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
-	tmpSlice.Scale(0.01, tmpSlice)
-
-	// Если нужно сглаживание, то применяем фильтр Гаусса
-	if cfg.DoSmooth {
-		gs := convolve.NewGaussianKernel(float64(cfg.SigmaT), float64(cfg.SigmaH), cfg.Size)
-		r := depolarizationMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
-		output := gs.Convolve(r)
-		r.Copy(output)
-
-		r = fluorescenceCapacityMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
-		output = gs.Convolve(r)
-		r.Copy(output)
+		log.Fatal("Error reading Depolarization Matrix:", err)
 	}
 
-	// переводим реперные значения деполяризации для исключения появления ошибки деления на ноль
-	delta_d := cfg.DeltaDust / (1.0 + cfg.DeltaDust)
-	delta_u := cfg.DeltaUrban / (1.0 + cfg.DeltaUrban)
-	delta_s := cfg.DeltaSoot / (1.0 + cfg.DeltaSoot)
+	// Scale and smooth matrices if needed
+	processMatrices(cfg, fluorescenceCapacityMatrix, depolarizationMatrix)
 
-	// Generate random values
-	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficient)
-	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficient)
-	genGfUrban := normalboxmueller.NewNormalDistParams(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
-	//genGfUrban := randomnormal.NewNormalRandGenerator(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
-	gfUs := genGfUrban.RandN(cfg.NumPoints)
+	// Convert reference depolarization values
+	deltaD, deltaU, deltaS := convertDeltas(cfg)
 
-	gfsMin := cfg.GfSoot * (1.0 - cfg.VariationCoefficient)
-	gfsMax := cfg.GfSoot * (1.0 + cfg.VariationCoefficient)
-	genGfSoot := normalboxmueller.NewNormalDistParams(cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
-	gfSs := genGfSoot.RandN(cfg.NumPoints)
-
-	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficient)
-	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficient)
-	genGfDust := normalboxmueller.NewNormalDistParams(cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax)
-	gfDs := genGfDust.RandN(cfg.NumPoints)
-
-	delta_s_min := delta_s * (1.0 - cfg.VariationCoefficient)
-	delta_s_max := delta_s * (1.0 + cfg.VariationCoefficient)
-	genDeltaSoot := normalboxmueller.NewNormalDistParams(delta_s, (delta_s_max-delta_s_min)/4, delta_s_min, delta_s_max)
-	delta_ss := genDeltaSoot.RandN(cfg.NumPoints)
-
-	delta_u_min := delta_u * (1.0 - cfg.VariationCoefficient)
-	delta_u_max := delta_u * (1.0 + cfg.VariationCoefficient)
-	genDeltaUrban := normalboxmueller.NewNormalDistParams(delta_u, (delta_u_max-delta_u_min)/4, delta_u_min, delta_u_max)
-	delta_us := genDeltaUrban.RandN(cfg.NumPoints)
-
-	delta_d_min := delta_d * (1.0 - cfg.VariationCoefficient)
-	delta_d_max := delta_d * (1.0 + cfg.VariationCoefficient)
-	genDeltaDust := normalboxmueller.NewNormalDistParams(delta_d, (delta_d_max-delta_d_min)/4, delta_d_min, delta_d_max)
-	delta_ds := genDeltaDust.RandN(cfg.NumPoints)
-
-	saveArraysToCSV("rand.csv", gfUs, delta_us, gfDs, delta_ds, gfSs, delta_ss)
-	r, c := fluorescenceCapacityMatrix.Dims()
-	if r == 0 || c == 0 {
-		fmt.Println("No data in FL matrix")
-		return
-	}
+	// Generate random parameter distributions
+	gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs := generateParameterDistributions(cfg, deltaD, deltaU, deltaS)
+	saveArraysToCSV("rand.csv", gfUs, deltaUs, gfDs, deltaDs, gfSs, deltaSs)
 
 	// Initialize result matrices
-	Eta_u := mat.NewDense(r, c, nil)
-	Eta_s := mat.NewDense(r, c, nil)
-	Eta_d := mat.NewDense(r, c, nil)
+	resultMatrices := initializeResultMatrices(fluorescenceCapacityMatrix)
 
-	Gf_u_n := mat.NewDense(r, c, nil)
-	Gf_d_n := mat.NewDense(r, c, nil)
-	Gf_s_n := mat.NewDense(r, c, nil)
-	Delta_u_n := mat.NewDense(r, c, nil)
-	Delta_d_n := mat.NewDense(r, c, nil)
-	Delta_s_n := mat.NewDense(r, c, nil)
+	// Process data points
+	newGf, newDelta := processDataPoints(
+		cfg,
+		fluorescenceCapacityMatrix,
+		depolarizationMatrix,
+		gfUs, gfDs, gfSs,
+		deltaUs, deltaDs, deltaSs,
+		resultMatrices,
+	)
 
-	// Copy first column (time/altitude)
-	for i := range r {
-		Eta_u.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Eta_s.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Eta_d.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Gf_u_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Gf_d_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Gf_s_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Delta_u_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Delta_d_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
-		Delta_s_n.Set(i, 0, fluorescenceCapacityMatrix.At(i, 0))
+	// Calculate averages
+	calculateAverages(newGf, newDelta, fluorescenceCapacityMatrix)
+
+	// Save results
+	saveResults(cfg.InputDir, resultMatrices)
+
+	// Generate heatmaps
+	generateHeatmaps(cfg.InputDir, depolarizationMatrix, resultMatrices)
+
+	// Print final results
+	printFinalResults(newGf, newDelta)
+}
+
+// Helper functions
+
+func processMatrices(cfg *config.Config, flMatrix, depMatrix *mat.Dense) {
+	rows, cols := depMatrix.Dims()
+	tmpSlice := depMatrix.Slice(0, rows, 1, cols).(*mat.Dense)
+	tmpSlice.Scale(0.01, tmpSlice)
+
+	if cfg.DoSmooth {
+		gs := convolve.NewGaussianKernel(float64(cfg.SigmaT), float64(cfg.SigmaH), cfg.Size)
+		smoothMatrix(flMatrix, gs, rows, cols)
+		smoothMatrix(depMatrix, gs, rows, cols)
+	}
+}
+
+func smoothMatrix(matrix *mat.Dense, gs *convolve.ConvolveKernel, rows, cols int) {
+	r := matrix.Slice(0, rows, 1, cols).(*mat.Dense)
+	output := gs.Convolve(r)
+	r.Copy(output)
+}
+
+func convertDeltas(cfg *config.Config) (deltaD, deltaU, deltaS float64) {
+	deltaD = cfg.DeltaDust / (1.0 + cfg.DeltaDust)
+	deltaU = cfg.DeltaUrban / (1.0 + cfg.DeltaUrban)
+	deltaS = cfg.DeltaSoot / (1.0 + cfg.DeltaSoot)
+	return
+}
+
+func generateParameterDistributions(cfg *config.Config, deltaD, deltaU, deltaS float64) (
+	gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs []float64,
+) {
+	// Urban aerosol
+	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficient)
+	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficient)
+	genGfUrban := normalboxmueller.NewNormalDistParams(
+		cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax,
+	)
+	gfUs = genGfUrban.RandN(cfg.NumPoints)
+
+	// Soot
+	gfsMin := cfg.GfSoot * (1.0 - cfg.VariationCoefficient)
+	gfsMax := cfg.GfSoot * (1.0 + cfg.VariationCoefficient)
+	genGfSoot := normalboxmueller.NewNormalDistParams(
+		cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax,
+	)
+	gfSs = genGfSoot.RandN(cfg.NumPoints)
+
+	// Dust
+	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficient)
+	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficient)
+	genGfDust := normalboxmueller.NewNormalDistParams(
+		cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax,
+	)
+	gfDs = genGfDust.RandN(cfg.NumPoints)
+
+	// Delta distributions
+	deltaSMin := deltaS * (1.0 - cfg.VariationCoefficient)
+	deltaSMax := deltaS * (1.0 + cfg.VariationCoefficient)
+	genDeltaSoot := normalboxmueller.NewNormalDistParams(
+		deltaS, (deltaSMax-deltaSMin)/4, deltaSMin, deltaSMax,
+	)
+	deltaSs = genDeltaSoot.RandN(cfg.NumPoints)
+
+	deltaUMin := deltaU * (1.0 - cfg.VariationCoefficient)
+	deltaUMax := deltaU * (1.0 + cfg.VariationCoefficient)
+	genDeltaUrban := normalboxmueller.NewNormalDistParams(
+		deltaU, (deltaUMax-deltaUMin)/4, deltaUMin, deltaUMax,
+	)
+	deltaUs = genDeltaUrban.RandN(cfg.NumPoints)
+
+	deltaDMin := deltaD * (1.0 - cfg.VariationCoefficient)
+	deltaDMax := deltaD * (1.0 + cfg.VariationCoefficient)
+	genDeltaDust := normalboxmueller.NewNormalDistParams(
+		deltaD, (deltaDMax-deltaDMin)/4, deltaDMin, deltaDMax,
+	)
+	deltaDs = genDeltaDust.RandN(cfg.NumPoints)
+
+	return gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs
+}
+
+type ResultMatrices struct {
+	EtaU, EtaS, EtaD          *mat.Dense
+	GfUN, GfDN, GfSN          *mat.Dense
+	DeltaUN, DeltaDN, DeltaSN *mat.Dense
+}
+
+func initializeResultMatrices(flMatrix *mat.Dense) *ResultMatrices {
+	r, c := flMatrix.Dims()
+
+	matrices := &ResultMatrices{
+		EtaU:    mat.NewDense(r, c, nil),
+		EtaS:    mat.NewDense(r, c, nil),
+		EtaD:    mat.NewDense(r, c, nil),
+		GfUN:    mat.NewDense(r, c, nil),
+		GfDN:    mat.NewDense(r, c, nil),
+		GfSN:    mat.NewDense(r, c, nil),
+		DeltaUN: mat.NewDense(r, c, nil),
+		DeltaDN: mat.NewDense(r, c, nil),
+		DeltaSN: mat.NewDense(r, c, nil),
 	}
 
-	// Создаем пул воркеров
-	numWorkers := runtime.NumCPU() // Используем все доступные ядра
+	// Copy first column (time/altitude)
+	for i := 0; i < r; i++ {
+		val := flMatrix.At(i, 0)
+		matrices.EtaU.Set(i, 0, val)
+		matrices.EtaS.Set(i, 0, val)
+		matrices.EtaD.Set(i, 0, val)
+		matrices.GfUN.Set(i, 0, val)
+		matrices.GfDN.Set(i, 0, val)
+		matrices.GfSN.Set(i, 0, val)
+		matrices.DeltaUN.Set(i, 0, val)
+		matrices.DeltaDN.Set(i, 0, val)
+		matrices.DeltaSN.Set(i, 0, val)
+	}
+
+	return matrices
+}
+
+func processDataPoints(
+	cfg *config.Config,
+	flMatrix, depMatrix *mat.Dense,
+	gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs []float64,
+	resultMatrices *ResultMatrices,
+) (newGf, newDelta [3]float64) {
+
+	numWorkers := runtime.NumCPU()
 	taskQueue := make(chan task, cfg.NumPoints)
 	resultQueue := make(chan result, cfg.NumPoints)
 
-	// Запускаем воркеры
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Add(1)
 		go worker(taskQueue, resultQueue, &wg)
 	}
 
-	newGf := make([]float64, 3)
-	newDelta := make([]float64, 3)
-	// Main processing loop
+	r, c := flMatrix.Dims()
 	for i := 0; i < r; i++ {
-		fmt.Printf("Row = %d\n", i)
+		fmt.Printf("Processing row %d/%d\n", i+1, r)
 		for j := 1; j < c; j++ {
-			delta_meas := depolarizationMatrix.At(i, j) // 100.0
-			GF_meas := fluorescenceCapacityMatrix.At(i, j)
+			deltaMeas := depMatrix.At(i, j)
+			gfMeas := flMatrix.At(i, j)
 
-			// Отправляем задачи воркерам
-			for k := range cfg.NumPoints {
-				taskQueue <- task{
-					GF_meas:    GF_meas,
-					delta_meas: delta_meas,
-					GF_u_k:     gfUs[k],
-					GF_d_k:     gfDs[k],
-					GF_s_k:     gfSs[k],
-					delta_u_k:  delta_us[k],
-					delta_d_k:  delta_ds[k],
-					delta_s_k:  delta_ss[k],
-				}
-			}
+			// Process point with workers
+			etasMean := processPoint(
+				cfg, gfMeas, deltaMeas,
+				gfUs, gfDs, gfSs,
+				deltaUs, deltaDs, deltaSs,
+				taskQueue, resultQueue,
+			)
 
-			// Собираем результаты
-			tmp_eta := make([]result, 0, cfg.NumPoints)
-			for k := 0; k < cfg.NumPoints; k++ {
-				res := <-resultQueue
-				if res.Valid { // nil означает недопустимое решение
-					tmp_eta = append(tmp_eta, res)
-				}
-			}
-
-			if len(tmp_eta) == 0 {
+			if etasMean == nil {
 				fmt.Printf("Warning: no valid solutions for point (%d,%d)\n", i, j)
 				continue
 			}
 
-			// Average the valid estimates
-			etas_mean := averageVectors(tmp_eta, cfg.AvgPercent)
-			Eta_u.Set(i, j, etas_mean[0].X)
-			Eta_d.Set(i, j, etas_mean[1].X)
-			Eta_s.Set(i, j, etas_mean[2].X)
-
-			Delta_u_n.Set(i, j, etas_mean[0].Delta)
-			Delta_d_n.Set(i, j, etas_mean[1].Delta)
-			Delta_s_n.Set(i, j, etas_mean[2].Delta)
-			Gf_u_n.Set(i, j, etas_mean[0].Gf)
-			Gf_d_n.Set(i, j, etas_mean[1].Gf)
-			Gf_s_n.Set(i, j, etas_mean[2].Gf)
-
-			newGf[0] += etas_mean[0].Gf
-			newGf[1] += etas_mean[1].Gf
-			newGf[2] += etas_mean[2].Gf
-
-			newDelta[0] += (etas_mean[0].Delta / (1 - etas_mean[0].Delta))
-			newDelta[1] += (etas_mean[1].Delta / (1 - etas_mean[1].Delta))
-			newDelta[2] += (etas_mean[2].Delta / (1 - etas_mean[2].Delta))
+			// Store results
+			updateResultMatrices(resultMatrices, i, j, etasMean)
+			updateAverages(&newGf, &newDelta, etasMean)
 		}
 	}
 
+	close(taskQueue)
+	wg.Wait()
+	return
+}
+
+func processPoint(
+	cfg *config.Config,
+	gfMeas, deltaMeas float64,
+	gfUs, gfDs, gfSs, deltaUs, deltaDs, deltaSs []float64,
+	taskQueue chan task, resultQueue chan result,
+) []avgresult {
+	// Send tasks to workers
+	for k := range cfg.NumPoints {
+		taskQueue <- task{
+			GF_meas:    gfMeas,
+			delta_meas: deltaMeas,
+			GF_u_k:     gfUs[k],
+			GF_d_k:     gfDs[k],
+			GF_s_k:     gfSs[k],
+			delta_u_k:  deltaUs[k],
+			delta_d_k:  deltaDs[k],
+			delta_s_k:  deltaSs[k],
+		}
+	}
+
+	// Collect results
+	tmpEta := make([]result, 0, cfg.NumPoints)
+	for k := 0; k < cfg.NumPoints; k++ {
+		res := <-resultQueue
+		if res.Valid {
+			tmpEta = append(tmpEta, res)
+		}
+	}
+
+	if len(tmpEta) == 0 {
+		return nil
+	}
+
+	return averageVectors(tmpEta, cfg.AvgPercent)
+}
+
+func updateResultMatrices(m *ResultMatrices, i, j int, etasMean []avgresult) {
+	m.EtaU.Set(i, j, etasMean[0].X)
+	m.EtaD.Set(i, j, etasMean[1].X)
+	m.EtaS.Set(i, j, etasMean[2].X)
+
+	m.DeltaUN.Set(i, j, etasMean[0].Delta)
+	m.DeltaDN.Set(i, j, etasMean[1].Delta)
+	m.DeltaSN.Set(i, j, etasMean[2].Delta)
+	m.GfUN.Set(i, j, etasMean[0].Gf)
+	m.GfDN.Set(i, j, etasMean[1].Gf)
+	m.GfSN.Set(i, j, etasMean[2].Gf)
+}
+
+func updateAverages(newGf, newDelta *[3]float64, etasMean []avgresult) {
+	newGf[0] += etasMean[0].Gf
+	newGf[1] += etasMean[1].Gf
+	newGf[2] += etasMean[2].Gf
+
+	newDelta[0] += (etasMean[0].Delta / (1 - etasMean[0].Delta))
+	newDelta[1] += (etasMean[1].Delta / (1 - etasMean[1].Delta))
+	newDelta[2] += (etasMean[2].Delta / (1 - etasMean[2].Delta))
+}
+
+func calculateAverages(newGf, newDelta [3]float64, flMatrix *mat.Dense) {
+	r, c := flMatrix.Dims()
 	nAvg := r * (c - 1)
-	for i := range 3 {
+	for i := range newGf {
 		newGf[i] /= float64(nAvg)
 		newDelta[i] /= float64(nAvg)
 	}
+}
 
-	// Завершаем работу воркеров
-	close(taskQueue)
-	wg.Wait()
-
-	err = saveMatrix(cfg.InputDir+"Eta_s.csv", Eta_s)
-	if err != nil {
-		log.Fatal("Error saving Eta_s matrix", err)
+func saveResults(outputDir string, m *ResultMatrices) {
+	saveMatrix := func(filename string, matrix *mat.Dense) {
+		if err := saveMatrix(outputDir+filename, matrix); err != nil {
+			log.Printf("Error saving %s: %v", filename, err)
+		}
 	}
 
-	err = saveMatrix(cfg.InputDir+"Eta_u.csv", Eta_u)
-	if err != nil {
-		log.Fatal("Error saving Eta_u matrix", err)
-	}
+	saveMatrix("Eta_s.csv", m.EtaS)
+	saveMatrix("Eta_u.csv", m.EtaU)
+	saveMatrix("Eta_d.csv", m.EtaD)
+	saveMatrix("Gf_u.csv", m.GfUN)
+	saveMatrix("Gf_d.csv", m.GfDN)
+	saveMatrix("Gf_s.csv", m.GfSN)
+	saveMatrix("Delta_u.csv", m.DeltaUN)
+	saveMatrix("Delta_d.csv", m.DeltaDN)
+	saveMatrix("Delta_s.csv", m.DeltaSN)
+}
 
-	err = saveMatrix(cfg.InputDir+"Eta_d.csv", Eta_d)
-	if err != nil {
-		log.Fatal("Error saving Eta_d matrix", err)
-	}
+func generateHeatmaps(outputDir string, depMatrix *mat.Dense, m *ResultMatrices) {
+	heatmapplotter.MakeHeatmapPlot(depMatrix, "Dep", outputDir+"Dep.pdf")
+	heatmapplotter.MakeHeatmapPlot(m.EtaD, "Eta_d", outputDir+"Eta_d.pdf")
+	heatmapplotter.MakeHeatmapPlot(m.EtaU, "Eta_u", outputDir+"Eta_u.pdf")
+	heatmapplotter.MakeHeatmapPlot(m.EtaS, "Eta_s", outputDir+"Eta_s.pdf")
+}
 
-	err = saveMatrix(cfg.InputDir+"Gf_u.csv", Gf_u_n)
-	if err != nil {
-		log.Fatal("Error saving Gf_u_n matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Gf_d.csv", Gf_d_n)
-	if err != nil {
-		log.Fatal("Error saving Gf_d_n matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Gf_s.csv", Gf_s_n)
-	if err != nil {
-		log.Fatal("Error saving Gf_s_n matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Delta_u.csv", Delta_u_n)
-	if err != nil {
-		log.Fatal("Error saving Delta_u matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Delta_d.csv", Delta_d_n)
-	if err != nil {
-		log.Fatal("Error saving Delta_d matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Delta_s.csv", Delta_s_n)
-	if err != nil {
-		log.Fatal("Error saving Delta_s matrix", err)
-	}
-
-	err = saveMatrix(cfg.InputDir+"Gf_s.csv", Gf_s_n)
-	if err != nil {
-		log.Fatal("Error saving Gf_s_n matrix", err)
-	}
-	heatmapplotter.MakeHeatmapPlot(depolarizationMatrix, "Dep", cfg.InputDir+"Dep.pdf")
-	heatmapplotter.MakeHeatmapPlot(Eta_d, "Eta_d", cfg.InputDir+"Eta_d.pdf")
-	heatmapplotter.MakeHeatmapPlot(Eta_u, "Eta_u", cfg.InputDir+"Eta_u.pdf")
-	heatmapplotter.MakeHeatmapPlot(Eta_s, "Eta_s", cfg.InputDir+"Eta_s.pdf")
-
+func printFinalResults(newGf, newDelta [3]float64) {
 	fmt.Println("Tuned parameters:")
 	fmt.Printf("Gf_u: %.3e, delta_u: %.3f\n", newGf[0], newDelta[0])
 	fmt.Printf("Gf_d: %.3e, delta_d: %.3f\n", newGf[1], newDelta[1])
 	fmt.Printf("Gf_s: %.3e, delta_s: %.3f\n", newGf[2], newDelta[2])
-	//_ = fluorescenceCapacityMatrix
-	//_ = depolarizationMatrix
 }
 
-// Структура задачи для воркера
+// Optimization and worker-related functions
+
 type task struct {
 	GF_meas    float64
 	delta_meas float64
@@ -274,12 +357,11 @@ type task struct {
 	delta_s_k  float64
 }
 
-// Структура для хранения результатов
 type result struct {
 	X     []float64
 	F     float64
-	Gf    [3]float64 //Gfd, Gfu, Gfs
-	Delta [3]float64 //Deltad. Deltau, Deltas
+	Gf    [3]float64
+	Delta [3]float64
 	Valid bool
 }
 
@@ -289,17 +371,20 @@ type avgresult struct {
 	Gf    float64
 }
 
-// Функция воркера
 func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for t := range tasks {
-		ntas_i, F_i, err := classifySinglePoint(t.GF_meas, t.delta_meas/(1+t.delta_meas),
-			t.GF_u_k, t.GF_d_k, t.GF_s_k, t.delta_u_k, t.delta_d_k, t.delta_s_k)
+		ntas, F, err := classifySinglePoint(
+			t.GF_meas,
+			t.delta_meas/(1+t.delta_meas),
+			t.GF_u_k, t.GF_d_k, t.GF_s_k,
+			t.delta_u_k, t.delta_d_k, t.delta_s_k,
+		)
 
-		if err == nil && isValidSolution(ntas_i) {
+		if err == nil && isValidSolution(ntas) {
 			results <- result{
-				X:     ntas_i,
-				F:     F_i,
+				X:     ntas,
+				F:     F,
 				Gf:    [3]float64{t.GF_u_k, t.GF_d_k, t.GF_s_k},
 				Delta: [3]float64{t.delta_u_k, t.delta_d_k, t.delta_s_k},
 				Valid: true,
@@ -310,7 +395,79 @@ func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 	}
 }
 
-// Проверка, что решение находится в допустимых пределах [0;1]
+func classifySinglePoint(GFMeas, deltaMeas, GFU, GFD, GFS, deltaU, deltaD, deltaS float64) ([]float64, float64, error) {
+	residual := func(x []float64) []float64 {
+		nu, nd, ns := x[0], x[1], x[2]
+
+		residuals := []float64{
+			1 - nu - ns - nd,
+			GFMeas - (ns*GFS + nu*GFU + nd*GFD),
+			deltaMeas - (ns*deltaS + nu*deltaU + nd*deltaD),
+		}
+
+		penalty := calculatePenalty(nu, nd, ns)
+		for i := range residuals {
+			residuals[i] += penalty
+		}
+
+		return residuals
+	}
+
+	problem := optimize.Problem{
+		Func: func(x []float64) float64 {
+			res := residual(x)
+			return floats.Norm(res, 2)
+		},
+	}
+
+	method := &optimize.NelderMead{}
+	settings := &optimize.Settings{
+		MajorIterations: maxIterations,
+		FuncEvaluations: 1000,
+		Converger: &optimize.FunctionConverge{
+			Relative:   convergenceTol,
+			Absolute:   convergenceTol,
+			Iterations: 1000,
+		},
+	}
+
+	initialGuess := []float64{0.5, 0.5, 0.5}
+	result, err := optimize.Minimize(problem, initialGuess, settings, method)
+	if err != nil {
+		return nil, 0, fmt.Errorf("optimization failed: %v", err)
+	}
+
+	// Apply bounds
+	for i := range result.X {
+		result.X[i] = math.Max(0, math.Min(1, result.X[i]))
+	}
+
+	// Check sum constraint
+	if math.Abs(floats.Sum(result.X)-1) > 0.01 {
+		return nil, 0, fmt.Errorf("invalid solution: sum of parameters = %f", floats.Sum(result.X))
+	}
+
+	return result.X, result.F, nil
+}
+
+func calculatePenalty(nu, nd, ns float64) float64 {
+	penalty := 0.0
+
+	addPenalty := func(val float64) {
+		if val < 0 {
+			penalty += penaltyCoefficient * val * val
+		} else if val > 1 {
+			penalty += penaltyCoefficient * (val - 1) * (val - 1)
+		}
+	}
+
+	addPenalty(nu)
+	addPenalty(nd)
+	addPenalty(ns)
+
+	return penalty
+}
+
 func isValidSolution(x []float64) bool {
 	for _, v := range x {
 		if v < 0 || v > 1 {
@@ -320,109 +477,23 @@ func isValidSolution(x []float64) bool {
 	return true
 }
 
-func classifySinglePoint(GF_meas, delta_meas, GF_u, GF_d, GF_s, delta_u, delta_d, delta_s float64) ([]float64, float64, error) {
-	residual := func(x []float64) []float64 {
-		nu, nd, ns := x[0], x[1], x[2]
-
-		// Базовые остатки
-		residuals := []float64{
-			1 - nu - ns - nd,
-			GF_meas - (ns*GF_s + nu*GF_u + nd*GF_d),
-			delta_meas - (ns*delta_s + nu*delta_u + nd*delta_d),
-		}
-
-		// Квадратичные штрафы за выход за границы [0, 1]
-		penalty := 0.0
-
-		// Штраф для nu ∉ [0, 1]
-		if nu < 0 {
-			penalty += 1000 * nu * nu
-		} else if nu > 1 {
-			penalty += 1000 * (nu - 1) * (nu - 1)
-		}
-
-		// Штраф для nd ∉ [0, 1]
-		if nd < 0 {
-			penalty += 1000 * nd * nd
-		} else if nd > 1 {
-			penalty += 1000 * (nd - 1) * (nd - 1)
-		}
-
-		// Штраф для ns ∉ [0, 1]
-		if ns < 0 {
-			penalty += 1000 * ns * ns
-		} else if ns > 1 {
-			penalty += 1000 * (ns - 1) * (ns - 1)
-		}
-
-		// Добавляем штраф ко всем компонентам остатка
-		for i := range residuals {
-			residuals[i] += penalty
-		}
-
-		return residuals
-	}
-
-	problem := optimize.Problem{
-
-		Func: func(x []float64) float64 {
-			res := residual(x)
-			return floats.Norm(res, 2)
-		},
-	}
-
-	// Use NelderMead optimization method
-	method := &optimize.NelderMead{}
-
-	// Add explicit bounds [0, 1] for all parameters
-	settings := &optimize.Settings{
-		MajorIterations: 100,
-		FuncEvaluations: 1000,
-		Converger: &optimize.FunctionConverge{
-			Relative:   1e-4,
-			Absolute:   1e-4,
-			Iterations: 1000,
-		},
-	}
-
-	initialGuess := []float64{0.5, 0.5, 0.5}
-	result, err := optimize.Minimize(problem, initialGuess, settings, method)
-	//fmt.Println(result.Stats.FuncEvaluations)
-	if err != nil {
-		return nil, 0, fmt.Errorf("optimization failed: %v", err)
-	}
-
-	// Дополнительная проверка границ
-	for i := range result.X {
-		result.X[i] = math.Max(0, math.Min(1, result.X[i]))
-	}
-
-	// Проверка суммы параметров (должна быть близка к 1)
-	sum := floats.Sum(result.X)
-	if math.Abs(sum-1) > 0.01 { // Допустимое отклонение 1%
-		return nil, 0, fmt.Errorf("invalid solution: sum of parameters = %f", sum)
-	}
-
-	return result.X, result.F, nil
-}
-
 func averageVectors(vectors []result, avgFrac float64) []avgresult {
 	if len(vectors) == 0 {
-		return []avgresult{}
+		return nil
 	}
 
-	slices.SortFunc(vectors, func(a result, b result) int {
+	slices.SortFunc(vectors, func(a, b result) int {
 		if a.F < b.F {
 			return -1
 		} else if a.F > b.F {
 			return 1
-		} else {
-			return 0
 		}
+		return 0
 	})
 
 	sum := make([]avgresult, 3)
 	Ntot := int(float64(len(vectors)) * avgFrac)
+
 	for i := 0; i < Ntot; i++ {
 		for j := range vectors[i].X {
 			sum[j].X += vectors[i].X[j]
@@ -430,111 +501,79 @@ func averageVectors(vectors []result, avgFrac float64) []avgresult {
 			sum[j].Delta += vectors[i].Delta[j]
 		}
 	}
-	//println(vectors[0].F, vectors[Ntot-1].F)
+
 	for i := range sum {
 		sum[i].Delta /= float64(Ntot)
 		sum[i].Gf /= float64(Ntot)
 		sum[i].X /= float64(Ntot)
 	}
+
 	return sum
 }
 
 func saveMatrix(filename string, m mat.Matrix) error {
-	// Создаем файл
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// Получаем размеры матрицы
 	r, c := m.Dims()
-
-	// Записываем матрицу построчно
 	for i := 0; i < r; i++ {
 		for j := 0; j < c; j++ {
-			// Форматируем число с 4 знаками после запятой
 			if j > 0 {
-				f.WriteString("\t") // Используем табуляцию как разделитель
+				f.WriteString("\t")
 			}
 			fmt.Fprintf(f, "%.4e", m.At(i, j))
 		}
-		f.WriteString("\n") // Переход на новую строку
+		f.WriteString("\n")
 	}
 
 	return nil
 }
 
-// Predicate — функция-предикат, определяющая условие фильтрации
-type Predicate[T any] func(T) bool
-
-// Filter — фильтрует срез, оставляя только элементы, удовлетворяющие предикату
-func Filter[T any](src []T, pred Predicate[T]) []T {
-	var filtered []T
-	for _, item := range src {
-		if pred(item) {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
-}
-
-func saveArraysToCSV(filename string, arr1, arr2, arr3, arr4, arr5, arr6 []float64) error {
-	// Open the file for writing
+func saveArraysToCSV(filename string, arrs ...[]float64) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	// Create a CSV writer
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	// Determine the maximum length among the arrays
-	maxLength := len(arr1)
-	lengths := []int{len(arr2), len(arr3), len(arr4), len(arr5), len(arr6)}
-	for _, length := range lengths {
-		if length > maxLength {
-			maxLength = length
-		}
-	}
-
 	// Write headers
-	headers := []string{"Array1", "Array2", "Array3", "Array4", "Array5", "Array6"}
+	headers := make([]string, len(arrs))
+	for i := range headers {
+		headers[i] = fmt.Sprintf("Array%d", i+1)
+	}
 	if err := writer.Write(headers); err != nil {
 		return err
 	}
 
-	// Write data rows
+	// Write data
+	maxLength := maxSliceLength(arrs...)
 	for i := 0; i < maxLength; i++ {
-		row := make([]string, 6)
-
-		// Add values from each array, or empty string if index is out of bounds
-		if i < len(arr1) {
-			row[0] = fmt.Sprintf("%v", arr1[i])
+		row := make([]string, len(arrs))
+		for j, arr := range arrs {
+			if i < len(arr) {
+				row[j] = fmt.Sprintf("%v", arr[i])
+			}
 		}
-		if i < len(arr2) {
-			row[1] = fmt.Sprintf("%v", arr2[i])
-		}
-		if i < len(arr3) {
-			row[2] = fmt.Sprintf("%v", arr3[i])
-		}
-		if i < len(arr4) {
-			row[3] = fmt.Sprintf("%v", arr4[i])
-		}
-		if i < len(arr5) {
-			row[4] = fmt.Sprintf("%v", arr5[i])
-		}
-		if i < len(arr6) {
-			row[5] = fmt.Sprintf("%v", arr6[i])
-		}
-
-		// Write the row
 		if err := writer.Write(row); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func maxSliceLength(slices ...[]float64) int {
+	max := 0
+	for _, s := range slices {
+		if len(s) > max {
+			max = len(s)
+		}
+	}
+	return max
 }

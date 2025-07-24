@@ -51,8 +51,10 @@ func (p *NormalDistParams) Generate() float64 {
 	z := z0*p.StdDev + p.Mean
 
 	// проверяем, что значение находится в пределах заданных границ
-	if z < p.Low || z > p.High {
-		z = 0
+	if z < p.Low {
+		z = p.Low
+	} else if z > p.High {
+		z = p.High
 	}
 
 	return z

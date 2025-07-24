@@ -4,8 +4,9 @@ import (
 	"classifier-go/internal/config"
 	"classifier-go/pkg/convolve"
 	"classifier-go/pkg/heatmapplotter"
-	"classifier-go/pkg/randomnormal"
+	"classifier-go/pkg/normalboxmueller"
 	"classifier-go/pkg/readmatrix"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"math"
@@ -56,34 +57,36 @@ func main() {
 	// Generate random values
 	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficient)
 	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficient)
-	genGfUrban := randomnormal.NewNormalRandGenerator(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
+	genGfUrban := normalboxmueller.NewNormalDistParams(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
+	//genGfUrban := randomnormal.NewNormalRandGenerator(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
 	gfUs := genGfUrban.RandN(cfg.NumPoints)
 
 	gfsMin := cfg.GfSoot * (1.0 - cfg.VariationCoefficient)
 	gfsMax := cfg.GfSoot * (1.0 + cfg.VariationCoefficient)
-	genGfSoot := randomnormal.NewNormalRandGenerator(cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
+	genGfSoot := normalboxmueller.NewNormalDistParams(cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
 	gfSs := genGfSoot.RandN(cfg.NumPoints)
 
 	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficient)
 	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficient)
-	genGfDust := randomnormal.NewNormalRandGenerator(cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax)
+	genGfDust := normalboxmueller.NewNormalDistParams(cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax)
 	gfDs := genGfDust.RandN(cfg.NumPoints)
 
 	delta_s_min := delta_s * (1.0 - cfg.VariationCoefficient)
 	delta_s_max := delta_s * (1.0 + cfg.VariationCoefficient)
-	genDeltaSoot := randomnormal.NewNormalRandGenerator(delta_s, (delta_s_max-delta_s_min)/4, delta_s_min, delta_s_max)
+	genDeltaSoot := normalboxmueller.NewNormalDistParams(delta_s, (delta_s_max-delta_s_min)/4, delta_s_min, delta_s_max)
 	delta_ss := genDeltaSoot.RandN(cfg.NumPoints)
 
 	delta_u_min := delta_u * (1.0 - cfg.VariationCoefficient)
 	delta_u_max := delta_u * (1.0 + cfg.VariationCoefficient)
-	genDeltaUrban := randomnormal.NewNormalRandGenerator(delta_u, (delta_u_max-delta_u_min)/4, delta_u_min, delta_u_max)
+	genDeltaUrban := normalboxmueller.NewNormalDistParams(delta_u, (delta_u_max-delta_u_min)/4, delta_u_min, delta_u_max)
 	delta_us := genDeltaUrban.RandN(cfg.NumPoints)
 
 	delta_d_min := delta_d * (1.0 - cfg.VariationCoefficient)
 	delta_d_max := delta_d * (1.0 + cfg.VariationCoefficient)
-	genDeltaDust := randomnormal.NewNormalRandGenerator(delta_d, (delta_d_max-delta_d_min)/4, delta_d_min, delta_d_max)
+	genDeltaDust := normalboxmueller.NewNormalDistParams(delta_d, (delta_d_max-delta_d_min)/4, delta_d_min, delta_d_max)
 	delta_ds := genDeltaDust.RandN(cfg.NumPoints)
 
+	saveArraysToCSV("rand.csv", gfUs, delta_us, gfDs, delta_ds, gfSs, delta_ss)
 	r, c := fluorescenceCapacityMatrix.Dims()
 	if r == 0 || c == 0 {
 		fmt.Println("No data in FL matrix")
@@ -478,4 +481,64 @@ func Filter[T any](src []T, pred Predicate[T]) []T {
 		}
 	}
 	return filtered
+}
+
+func saveArraysToCSV(filename string, arr1, arr2, arr3, arr4, arr5, arr6 []float64) error {
+	// Open the file for writing
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Create a CSV writer
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Determine the maximum length among the arrays
+	maxLength := len(arr1)
+	lengths := []int{len(arr2), len(arr3), len(arr4), len(arr5), len(arr6)}
+	for _, length := range lengths {
+		if length > maxLength {
+			maxLength = length
+		}
+	}
+
+	// Write headers
+	headers := []string{"Array1", "Array2", "Array3", "Array4", "Array5", "Array6"}
+	if err := writer.Write(headers); err != nil {
+		return err
+	}
+
+	// Write data rows
+	for i := 0; i < maxLength; i++ {
+		row := make([]string, 6)
+
+		// Add values from each array, or empty string if index is out of bounds
+		if i < len(arr1) {
+			row[0] = fmt.Sprintf("%v", arr1[i])
+		}
+		if i < len(arr2) {
+			row[1] = fmt.Sprintf("%v", arr2[i])
+		}
+		if i < len(arr3) {
+			row[2] = fmt.Sprintf("%v", arr3[i])
+		}
+		if i < len(arr4) {
+			row[3] = fmt.Sprintf("%v", arr4[i])
+		}
+		if i < len(arr5) {
+			row[4] = fmt.Sprintf("%v", arr5[i])
+		}
+		if i < len(arr6) {
+			row[5] = fmt.Sprintf("%v", arr6[i])
+		}
+
+		// Write the row
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

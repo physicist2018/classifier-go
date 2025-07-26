@@ -95,7 +95,7 @@ func smoothMatrix(matrix *mat.Dense, gs *convolve.ConvolveKernel, rows, cols int
 func convertDeltas(cfg *config.Config) (float64, float64, float64) {
 	return cfg.DeltaDust / (1.0 + cfg.DeltaDust),
 		cfg.DeltaUrban / (1.0 + cfg.DeltaUrban),
-		cfg.DeltaSoot / (1.0 + cfg.DeltaSoot)
+		cfg.DeltaSmoke / (1.0 + cfg.DeltaSmoke)
 }
 
 func generateParameterDistributions(cfg *config.Config, deltaD, deltaU, deltaS float64) ([]float64, []float64, []float64, []float64, []float64, []float64) {
@@ -106,9 +106,9 @@ func generateParameterDistributions(cfg *config.Config, deltaD, deltaU, deltaS f
 	gfUs := genGfUrban.RandN(cfg.NumPoints)
 
 	// Soot
-	gfsMin := cfg.GfSoot * (1.0 - cfg.VariationCoefficient)
-	gfsMax := cfg.GfSoot * (1.0 + cfg.VariationCoefficient)
-	genGfSoot := normalboxmueller.NewNormalDistParams(cfg.GfSoot, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
+	gfsMin := cfg.GfSmoke * (1.0 - cfg.VariationCoefficient)
+	gfsMax := cfg.GfSmoke * (1.0 + cfg.VariationCoefficient)
+	genGfSoot := normalboxmueller.NewNormalDistParams(cfg.GfSmoke, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
 	gfSs := genGfSoot.RandN(cfg.NumPoints)
 
 	// Dust

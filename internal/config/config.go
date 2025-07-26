@@ -10,10 +10,10 @@ import (
 
 type Config struct {
 	GfUrban              float64 `yaml:"gf_urban"`
-	GfSoot               float64 `yaml:"gf_soot"`
+	GfSmoke              float64 `yaml:"gf_smoke"`
 	GfDust               float64 `yaml:"gf_dust"`
 	DeltaUrban           float64 `yaml:"delta_urban"`
-	DeltaSoot            float64 `yaml:"delta_soot"`
+	DeltaSmoke           float64 `yaml:"delta_smoke"`
 	DeltaDust            float64 `yaml:"delta_dust"`
 	VariationCoefficient float64 `yaml:"variation_coefficient"`
 	InputDir             string  `yaml:"input_dir"`
@@ -36,10 +36,10 @@ func Parse() *Config {
 	// Создаем конфиг с дефолтными значениями
 	cfg := &Config{
 		GfUrban:              0.55e-4,
-		GfSoot:               4e-4,
+		GfSmoke:              4e-4,
 		GfDust:               0.3e-4,
 		DeltaUrban:           0.05,
-		DeltaSoot:            0.06,
+		DeltaSmoke:           0.06,
 		DeltaDust:            0.26,
 		VariationCoefficient: 0.1,
 		InputDir:             "./",
@@ -79,10 +79,10 @@ func loadFromYAML(filename string, cfg *Config) error {
 
 func parseFlags(cfg *Config) {
 	flag.Float64Var(&cfg.GfUrban, "gf-urban", cfg.GfUrban, "fluorescence capacity of urban aerosol")
-	flag.Float64Var(&cfg.GfSoot, "gf-soot", cfg.GfSoot, "fluorescence capacity of soot aerosol")
+	flag.Float64Var(&cfg.GfSmoke, "gf-smoke", cfg.GfSmoke, "fluorescence capacity of smoke aerosol")
 	flag.Float64Var(&cfg.GfDust, "gf-dust", cfg.GfDust, "fluorescence capacity of dust aerosol")
 	flag.Float64Var(&cfg.DeltaUrban, "delta-urban", cfg.DeltaUrban, "aerosol depolarization for urban aerosol")
-	flag.Float64Var(&cfg.DeltaSoot, "delta-soot", cfg.DeltaSoot, "aerosol depolarization for soot aerosol")
+	flag.Float64Var(&cfg.DeltaSmoke, "delta-smoke", cfg.DeltaSmoke, "aerosol depolarization for smoke aerosol")
 	flag.Float64Var(&cfg.DeltaDust, "delta-dust", cfg.DeltaDust, "aerosol depolarization for dust aerosol")
 	flag.Float64Var(&cfg.VariationCoefficient, "var-coef", cfg.VariationCoefficient, "variation coefficient for aerosol parameters")
 	flag.StringVar(&cfg.InputDir, "input-dir", cfg.InputDir, "input directory")

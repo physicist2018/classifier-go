@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sync"
 
+	"gonum.org/v1/gonum/diff/fd"
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/optimize"
@@ -23,8 +24,8 @@ import (
 
 const (
 	penaltyCoefficient = 1000
-	convergenceTol     = 1e-4
-	maxIterations      = 100
+	convergenceTol     = 1e-5
+	maxIterations      = 1000
 )
 
 func main() {
@@ -93,9 +94,9 @@ func smoothMatrix(matrix *mat.Dense, gs *convolve.ConvolveKernel, rows, cols int
 }
 
 func convertDeltas(cfg *config.Config) (float64, float64, float64) {
-	return cfg.DeltaDust / (1.0 + cfg.DeltaDust),
-		cfg.DeltaUrban / (1.0 + cfg.DeltaUrban),
-		cfg.DeltaSmoke / (1.0 + cfg.DeltaSmoke)
+	return cfg.DeltaDust,
+		cfg.DeltaUrban,
+		cfg.DeltaSmoke
 }
 
 func generateParameterDistributions(cfg *config.Config, deltaD, deltaU, deltaS float64) ([]float64, []float64, []float64, []float64, []float64, []float64) {
@@ -240,9 +241,9 @@ func processDataPoints(
 			newGf[1] += etasMean[1].Gf
 			newGf[2] += etasMean[2].Gf
 
-			newDelta[0] += etasMean[0].Delta / (1 - etasMean[0].Delta)
-			newDelta[1] += etasMean[1].Delta / (1 - etasMean[1].Delta)
-			newDelta[2] += etasMean[2].Delta / (1 - etasMean[2].Delta)
+			newDelta[0] += etasMean[0].Delta
+			newDelta[1] += etasMean[1].Delta
+			newDelta[2] += etasMean[2].Delta
 
 			pointCount++
 		}
@@ -329,7 +330,7 @@ func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 	for t := range tasks {
 		ntas, F, err := classifySinglePoint(
 			t.GF_meas,
-			t.delta_meas/(1+t.delta_meas),
+			t.delta_meas,
 			t.GF_u_k,
 			t.GF_d_k,
 			t.GF_s_k,
@@ -353,13 +354,13 @@ func worker(tasks <-chan task, results chan<- result, wg *sync.WaitGroup) {
 }
 
 func classifySinglePoint(GFMeas, deltaMeas, GFU, GFD, GFS, deltaU, deltaD, deltaS float64) ([]float64, float64, error) {
-	residual := func(x []float64) []float64 {
+	objectiveFunction := func(x []float64) float64 {
 		nu, nd, ns := x[0], x[1], x[2]
 
 		residuals := []float64{
 			1 - nu - ns - nd,
-			GFMeas - (ns*GFS + nu*GFU + nd*GFD),
-			deltaMeas - (ns*deltaS + nu*deltaU + nd*deltaD),
+			(GFMeas - (ns*GFS + nu*GFU + nd*GFD)),
+			(deltaMeas - (ns*deltaS + nu*deltaU + nd*deltaD)),
 		}
 
 		penalty := calculatePenalty(nu, nd, ns)
@@ -367,17 +368,19 @@ func classifySinglePoint(GFMeas, deltaMeas, GFU, GFD, GFS, deltaU, deltaD, delta
 			residuals[i] += penalty
 		}
 
-		return residuals
+		return math.Pow(floats.Norm(residuals, 2), 2)
+	}
+
+	objectiveGrad := func(grad, x []float64) {
+		fd.Gradient(grad, objectiveFunction, x, nil)
 	}
 
 	problem := optimize.Problem{
-		Func: func(x []float64) float64 {
-			res := residual(x)
-			return floats.Norm(res, 2)
-		},
+		Grad: objectiveGrad,
+		Func: objectiveFunction,
 	}
 
-	method := &optimize.NelderMead{}
+	method := &optimize.BFGS{}
 	settings := &optimize.Settings{
 		MajorIterations: maxIterations,
 		FuncEvaluations: 1000,
@@ -388,7 +391,7 @@ func classifySinglePoint(GFMeas, deltaMeas, GFU, GFD, GFS, deltaU, deltaD, delta
 		},
 	}
 
-	initialGuess := []float64{0.33, 0.33, 0.34} // Более сбалансированное начальное приближение
+	initialGuess := []float64{0.1, 0.5, 0.4} // Более сбалансированное начальное приближение
 	result, err := optimize.Minimize(problem, initialGuess, settings, method)
 	if err != nil {
 		return nil, 0, fmt.Errorf("optimization failed: %v", err)
@@ -405,7 +408,7 @@ func classifySinglePoint(GFMeas, deltaMeas, GFU, GFD, GFS, deltaU, deltaD, delta
 		floats.Scale(1/sum, result.X)
 	}
 
-	if math.Abs(sum-1) > 0.1 { // Более строгая проверка
+	if math.Abs(sum-1) > 0.05 { // Более строгая проверка
 		return nil, 0, fmt.Errorf("invalid solution: sum of parameters = %f", sum)
 	}
 
@@ -435,7 +438,8 @@ func isValidSolution(x []float64) bool {
 			return false
 		}
 	}
-	return floats.Sum(x) > 0.9 && floats.Sum(x) < 1.1 // Допуск 10%
+
+	return floats.Sum(x) > 0.95 && floats.Sum(x) < 1.05 // Допуск 5%
 }
 
 func averageVectors(vectors []result, avgFrac float64) []avgresult {

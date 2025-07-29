@@ -3,9 +3,9 @@ module classifier-go
 go 1.24.0
 
 require (
+	github.com/spf13/pflag v1.0.7
 	gonum.org/v1/gonum v0.16.0
 	gonum.org/v1/plot v0.15.2
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

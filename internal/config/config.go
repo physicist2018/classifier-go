@@ -1,63 +1,45 @@
 package config
 
 import (
-	"flag"
-	"fmt"
-	"os"
-
-	"gopkg.in/yaml.v3"
+	"github.com/spf13/pflag"
 )
 
 type Config struct {
-	GfUrban                   float64 `yaml:"gf_urban"`
-	GfSmoke                   float64 `yaml:"gf_smoke"`
-	GfDust                    float64 `yaml:"gf_dust"`
-	DeltaUrban                float64 `yaml:"delta_urban"`
-	DeltaSmoke                float64 `yaml:"delta_smoke"`
-	DeltaDust                 float64 `yaml:"delta_dust"`
-	VariationCoefficientDelta float64 `yaml:"variation_coefficient_delta"`
-	VariationCoefficientGf    float64 `yaml:"variation_coefficient_gf"`
-	InputDir                  string  `yaml:"input_dir"`
-	NumPoints                 int     `yaml:"num_points"`
-	DoSmooth                  bool    `yaml:"do_smooth"`
-	SigmaH                    int     `yaml:"sigma_h"`
-	SigmaT                    int     `yaml:"sigma_t"`
-	Size                      int     `yaml:"size"`
-	AvgPercent                float64 `yaml:"avg_percent"`
+	GfUrban      float64
+	GfSmoke      float64
+	GfDust       float64
+	DeltaUrban   float64
+	DeltaSmoke   float64
+	DeltaDust    float64
+	VarCoefDelta float64
+	VarCoefGf    float64
+	InputDir     string
+	NumPoints    int
+	DoSmooth     bool
+	SigmaH       int
+	SigmaT       int
+	Size         int
+	AvgPercent   float64
 }
 
 func Parse() *Config {
-	// Сначала создаем временный парсер только для флага config
-	tempFlags := flag.NewFlagSet("temp", flag.ContinueOnError)
-	configFile := tempFlags.String("config", "config.yml", "path to config file")
-
-	// Парсим только флаг config, игнорируя другие
-	tempFlags.Parse(os.Args[1:])
-
 	// Создаем конфиг с дефолтными значениями
 	cfg := &Config{
-		GfUrban:                   0.55e-4,
-		GfSmoke:                   4e-4,
-		GfDust:                    0.3e-4,
-		DeltaUrban:                0.05,
-		DeltaSmoke:                0.06,
-		DeltaDust:                 0.26,
-		VariationCoefficientDelta: 0.1,
-		VariationCoefficientGf:    0.1,
-		InputDir:                  "./",
-		NumPoints:                 100,
-		DoSmooth:                  false,
-		SigmaH:                    5,
-		SigmaT:                    3,
-		Size:                      7,
-		AvgPercent:                0.1,
-	}
-
-	// Загружаем конфиг из YAML, если файл существует
-	if _, err := os.Stat(*configFile); err == nil {
-		if err := loadFromYAML(*configFile, cfg); err != nil {
-			fmt.Printf("Error loading config from YAML: %v\n", err)
-		}
+		GfUrban:      0.55e-4,
+		GfSmoke:      4e-4,
+		GfDust:       0.3e-4,
+		DeltaUrban:   0.05,
+		DeltaSmoke:   0.06,
+		DeltaDust:    0.26,
+		VarCoefDelta: 0.1,
+		VarCoefGf:    0.1,
+		InputDir:     "./",
+		NumPoints:    100,
+		DoSmooth:     false,
+		SigmaH:       5,
+		SigmaT:       3,
+		Size:         7,
+		AvgPercent:   0.1,
 	}
 
 	// Теперь парсим все флаги, которые могут переопределить значения
@@ -66,35 +48,22 @@ func Parse() *Config {
 	return cfg
 }
 
-func loadFromYAML(filename string, cfg *Config) error {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return fmt.Errorf("failed to unmarshal YAML: %w", err)
-	}
-
-	return nil
-}
-
 func parseFlags(cfg *Config) {
-	flag.Float64Var(&cfg.GfUrban, "gf-urban", cfg.GfUrban, "fluorescence capacity of urban aerosol")
-	flag.Float64Var(&cfg.GfSmoke, "gf-smoke", cfg.GfSmoke, "fluorescence capacity of smoke aerosol")
-	flag.Float64Var(&cfg.GfDust, "gf-dust", cfg.GfDust, "fluorescence capacity of dust aerosol")
-	flag.Float64Var(&cfg.DeltaUrban, "delta-urban", cfg.DeltaUrban, "aerosol depolarization for urban aerosol")
-	flag.Float64Var(&cfg.DeltaSmoke, "delta-smoke", cfg.DeltaSmoke, "aerosol depolarization for smoke aerosol")
-	flag.Float64Var(&cfg.DeltaDust, "delta-dust", cfg.DeltaDust, "aerosol depolarization for dust aerosol")
-	flag.Float64Var(&cfg.VariationCoefficientDelta, "var-coef-delta", cfg.VariationCoefficientDelta, "variation coefficient for aerosol depolarization")
-	flag.Float64Var(&cfg.VariationCoefficientGf, "var-coef-gf", cfg.VariationCoefficientGf, "variation coefficient for Gf")
-	flag.StringVar(&cfg.InputDir, "input-dir", cfg.InputDir, "input directory")
-	flag.IntVar(&cfg.NumPoints, "num-points", cfg.NumPoints, "number of data points to simulate")
-	flag.BoolVar(&cfg.DoSmooth, "smooth", cfg.DoSmooth, "apply smoothing to the data")
-	flag.IntVar(&cfg.SigmaH, "sigma-h", cfg.SigmaH, "spatial smoothing size in bins")
-	flag.IntVar(&cfg.SigmaT, "sigma-t", cfg.SigmaT, "temporal smoothing size in bins")
-	flag.IntVar(&cfg.Size, "size", cfg.Size, "kernel size in bins")
-	flag.Float64Var(&cfg.AvgPercent, "avg-percent", cfg.AvgPercent, "percentage of data to average")
+	pflag.Float64Var(&cfg.GfUrban, "gf-urban", cfg.GfUrban, "емкость флуоресценции для городского аэрозоля")
+	pflag.Float64Var(&cfg.GfSmoke, "gf-smoke", cfg.GfSmoke, "ескость флкоресценции для смога")
+	pflag.Float64Var(&cfg.GfDust, "gf-dust", cfg.GfDust, "ескость флуоресценции для пылевого аэрозоля")
+	pflag.Float64Var(&cfg.DeltaUrban, "delta-urban", cfg.DeltaUrban, "аэрозольная деполяризация для городского аэрозоля")
+	pflag.Float64Var(&cfg.DeltaSmoke, "delta-smoke", cfg.DeltaSmoke, "аэрозольная деполяризация для смога")
+	pflag.Float64Var(&cfg.DeltaDust, "delta-dust", cfg.DeltaDust, "аэрозольная деполяризация для пылевого аэрозоля")
+	pflag.Float64Var(&cfg.VarCoefDelta, "var-coef-delta", cfg.VarCoefDelta, "параметр вариативности для деполяризации")
+	pflag.Float64Var(&cfg.VarCoefGf, "var-coef-gf", cfg.VarCoefGf, "параметр вариативности для емкости флуоресценции")
+	pflag.StringVar(&cfg.InputDir, "input-dir", cfg.InputDir, "путь к каталогу где хранятся входные данные")
+	pflag.IntVar(&cfg.NumPoints, "num-points", cfg.NumPoints, "число начальных значений реперных параметров")
+	pflag.BoolVar(&cfg.DoSmooth, "smooth", cfg.DoSmooth, "применить сглаживание данных")
+	pflag.IntVar(&cfg.SigmaH, "sigma-h", cfg.SigmaH, "полуширина окна сглаживания по высоте (отсчеты)")
+	pflag.IntVar(&cfg.SigmaT, "sigma-t", cfg.SigmaT, "полуширина окна сглаживания по времени (отсчеты)")
+	pflag.IntVar(&cfg.Size, "size", cfg.Size, "размер окна сглаживания")
+	pflag.Float64Var(&cfg.AvgPercent, "avg-percent", cfg.AvgPercent, "персентиль для усреднения данных")
 
-	flag.Parse()
+	pflag.Parse()
 }

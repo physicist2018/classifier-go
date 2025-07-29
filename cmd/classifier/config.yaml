@@ -4,7 +4,8 @@ gf_dust: 0.3e-4
 delta_urban: 0.05
 delta_smoke: 0.06
 delta_dust: 0.26
-variation_coefficient: 0.1
+variation_coefficient_delta: 0.1
+variation_coefficient_gf: 0.1
 input_dir: "./"
 num_points: 100
 do_smooth: true

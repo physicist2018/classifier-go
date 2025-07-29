@@ -162,3 +162,13 @@ avg_percent: 0.1
 - num-points
 - var-coef
 - avg-percent
+
+### Дополнительные параметры
+- variation_coefficient_delta определяет вариацию всех параметров Gf
+- variation_coefficient_gf определяет вариацию всех параметров delta
+- variation_coefficient удален
+
+### Изменения
+- Изменил решатель на BGFS
+- Добавил сохранение матрицы погрешностей
+- Изменил способ расчета невязки

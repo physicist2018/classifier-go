@@ -101,36 +101,36 @@ func convertDeltas(cfg *config.Config) (float64, float64, float64) {
 
 func generateParameterDistributions(cfg *config.Config, deltaD, deltaU, deltaS float64) ([]float64, []float64, []float64, []float64, []float64, []float64) {
 	// Urban
-	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficient)
-	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficient)
+	gfuMin := cfg.GfUrban * (1.0 - cfg.VariationCoefficientGf)
+	gfuMax := cfg.GfUrban * (1.0 + cfg.VariationCoefficientGf)
 	genGfUrban := normalboxmueller.NewNormalDistParams(cfg.GfUrban, (gfuMax-gfuMin)/4, gfuMin, gfuMax)
 	gfUs := genGfUrban.RandN(cfg.NumPoints)
 
 	// Soot
-	gfsMin := cfg.GfSmoke * (1.0 - cfg.VariationCoefficient)
-	gfsMax := cfg.GfSmoke * (1.0 + cfg.VariationCoefficient)
+	gfsMin := cfg.GfSmoke * (1.0 - cfg.VariationCoefficientGf)
+	gfsMax := cfg.GfSmoke * (1.0 + cfg.VariationCoefficientGf)
 	genGfSoot := normalboxmueller.NewNormalDistParams(cfg.GfSmoke, (gfsMax-gfsMin)/4, gfsMin, gfsMax)
 	gfSs := genGfSoot.RandN(cfg.NumPoints)
 
 	// Dust
-	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficient)
-	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficient)
+	gfdMin := cfg.GfDust * (1.0 - cfg.VariationCoefficientGf)
+	gfdMax := cfg.GfDust * (1.0 + cfg.VariationCoefficientGf)
 	genGfDust := normalboxmueller.NewNormalDistParams(cfg.GfDust, (gfdMax-gfdMin)/4, gfdMin, gfdMax)
 	gfDs := genGfDust.RandN(cfg.NumPoints)
 
 	// Delta distributions
-	deltaSMin := deltaS * (1.0 - cfg.VariationCoefficient)
-	deltaSMax := deltaS * (1.0 + cfg.VariationCoefficient)
+	deltaSMin := deltaS * (1.0 - cfg.VariationCoefficientDelta)
+	deltaSMax := deltaS * (1.0 + cfg.VariationCoefficientDelta)
 	genDeltaSoot := normalboxmueller.NewNormalDistParams(deltaS, (deltaSMax-deltaSMin)/4, deltaSMin, deltaSMax)
 	deltaSs := genDeltaSoot.RandN(cfg.NumPoints)
 
-	deltaUMin := deltaU * (1.0 - cfg.VariationCoefficient)
-	deltaUMax := deltaU * (1.0 + cfg.VariationCoefficient)
+	deltaUMin := deltaU * (1.0 - cfg.VariationCoefficientDelta)
+	deltaUMax := deltaU * (1.0 + cfg.VariationCoefficientDelta)
 	genDeltaUrban := normalboxmueller.NewNormalDistParams(deltaU, (deltaUMax-deltaUMin)/4, deltaUMin, deltaUMax)
 	deltaUs := genDeltaUrban.RandN(cfg.NumPoints)
 
-	deltaDMin := deltaD * (1.0 - cfg.VariationCoefficient)
-	deltaDMax := deltaD * (1.0 + cfg.VariationCoefficient)
+	deltaDMin := deltaD * (1.0 - cfg.VariationCoefficientDelta)
+	deltaDMax := deltaD * (1.0 + cfg.VariationCoefficientDelta)
 	genDeltaDust := normalboxmueller.NewNormalDistParams(deltaD, (deltaDMax-deltaDMin)/4, deltaDMin, deltaDMax)
 	deltaDs := genDeltaDust.RandN(cfg.NumPoints)
 
@@ -141,6 +141,7 @@ type ResultMatrices struct {
 	EtaU, EtaS, EtaD          *mat.Dense
 	GfUN, GfDN, GfSN          *mat.Dense
 	DeltaUN, DeltaDN, DeltaSN *mat.Dense
+	ErrMat                    *mat.Dense
 }
 
 func initializeResultMatrices(flMatrix *mat.Dense) *ResultMatrices {
@@ -155,6 +156,7 @@ func initializeResultMatrices(flMatrix *mat.Dense) *ResultMatrices {
 		DeltaUN: mat.NewDense(r, c, nil),
 		DeltaDN: mat.NewDense(r, c, nil),
 		DeltaSN: mat.NewDense(r, c, nil),
+		ErrMat:  mat.NewDense(r, c, nil),
 	}
 
 	// Copy first column
@@ -169,6 +171,7 @@ func initializeResultMatrices(flMatrix *mat.Dense) *ResultMatrices {
 		mats.DeltaUN.Set(i, 0, val)
 		mats.DeltaDN.Set(i, 0, val)
 		mats.DeltaSN.Set(i, 0, val)
+		mats.ErrMat.Set(i, 0, val)
 	}
 
 	return mats
@@ -235,6 +238,7 @@ func processDataPoints(
 			resultMats.DeltaUN.Set(i, j, etasMean[0].Delta)
 			resultMats.DeltaDN.Set(i, j, etasMean[1].Delta)
 			resultMats.DeltaSN.Set(i, j, etasMean[2].Delta)
+			resultMats.ErrMat.Set(i, j, etasMean[0].F)
 
 			// Accumulate for averages
 			newGf[0] += etasMean[0].Gf
@@ -321,6 +325,7 @@ type result struct {
 
 type avgresult struct {
 	X     float64
+	F     float64
 	Delta float64
 	Gf    float64
 }
@@ -465,6 +470,7 @@ func averageVectors(vectors []result, avgFrac float64) []avgresult {
 	sum := make([]avgresult, 3)
 	for i := 0; i < N; i++ {
 		for j := 0; j < 3; j++ {
+			sum[j].F += vectors[i].F
 			sum[j].X += vectors[i].X[j]
 			sum[j].Gf += vectors[i].Gf[j]
 			sum[j].Delta += vectors[i].Delta[j]
@@ -473,6 +479,7 @@ func averageVectors(vectors []result, avgFrac float64) []avgresult {
 
 	// Усредняем
 	for j := 0; j < 3; j++ {
+		sum[j].F /= float64(N)
 		sum[j].X /= float64(N)
 		sum[j].Gf /= float64(N)
 		sum[j].Delta /= float64(N)
@@ -497,6 +504,7 @@ func saveResults(outputDir string, m *ResultMatrices) {
 	save("Delta_u.csv", m.DeltaUN)
 	save("Delta_d.csv", m.DeltaDN)
 	save("Delta_s.csv", m.DeltaSN)
+	save("Err.csv", m.ErrMat)
 }
 
 func saveMatrix(filename string, m mat.Matrix) error {

@@ -9,20 +9,21 @@ import (
 )
 
 type Config struct {
-	GfUrban              float64 `yaml:"gf_urban"`
-	GfSmoke              float64 `yaml:"gf_smoke"`
-	GfDust               float64 `yaml:"gf_dust"`
-	DeltaUrban           float64 `yaml:"delta_urban"`
-	DeltaSmoke           float64 `yaml:"delta_smoke"`
-	DeltaDust            float64 `yaml:"delta_dust"`
-	VariationCoefficient float64 `yaml:"variation_coefficient"`
-	InputDir             string  `yaml:"input_dir"`
-	NumPoints            int     `yaml:"num_points"`
-	DoSmooth             bool    `yaml:"do_smooth"`
-	SigmaH               int     `yaml:"sigma_h"`
-	SigmaT               int     `yaml:"sigma_t"`
-	Size                 int     `yaml:"size"`
-	AvgPercent           float64 `yaml:"avg_percent"`
+	GfUrban                   float64 `yaml:"gf_urban"`
+	GfSmoke                   float64 `yaml:"gf_smoke"`
+	GfDust                    float64 `yaml:"gf_dust"`
+	DeltaUrban                float64 `yaml:"delta_urban"`
+	DeltaSmoke                float64 `yaml:"delta_smoke"`
+	DeltaDust                 float64 `yaml:"delta_dust"`
+	VariationCoefficientDelta float64 `yaml:"variation_coefficient_delta"`
+	VariationCoefficientGf    float64 `yaml:"variation_coefficient_gf"`
+	InputDir                  string  `yaml:"input_dir"`
+	NumPoints                 int     `yaml:"num_points"`
+	DoSmooth                  bool    `yaml:"do_smooth"`
+	SigmaH                    int     `yaml:"sigma_h"`
+	SigmaT                    int     `yaml:"sigma_t"`
+	Size                      int     `yaml:"size"`
+	AvgPercent                float64 `yaml:"avg_percent"`
 }
 
 func Parse() *Config {
@@ -35,20 +36,21 @@ func Parse() *Config {
 
 	// Создаем конфиг с дефолтными значениями
 	cfg := &Config{
-		GfUrban:              0.55e-4,
-		GfSmoke:              4e-4,
-		GfDust:               0.3e-4,
-		DeltaUrban:           0.05,
-		DeltaSmoke:           0.06,
-		DeltaDust:            0.26,
-		VariationCoefficient: 0.1,
-		InputDir:             "./",
-		NumPoints:            100,
-		DoSmooth:             false,
-		SigmaH:               5,
-		SigmaT:               3,
-		Size:                 7,
-		AvgPercent:           0.1,
+		GfUrban:                   0.55e-4,
+		GfSmoke:                   4e-4,
+		GfDust:                    0.3e-4,
+		DeltaUrban:                0.05,
+		DeltaSmoke:                0.06,
+		DeltaDust:                 0.26,
+		VariationCoefficientDelta: 0.1,
+		VariationCoefficientGf:    0.1,
+		InputDir:                  "./",
+		NumPoints:                 100,
+		DoSmooth:                  false,
+		SigmaH:                    5,
+		SigmaT:                    3,
+		Size:                      7,
+		AvgPercent:                0.1,
 	}
 
 	// Загружаем конфиг из YAML, если файл существует
@@ -84,7 +86,8 @@ func parseFlags(cfg *Config) {
 	flag.Float64Var(&cfg.DeltaUrban, "delta-urban", cfg.DeltaUrban, "aerosol depolarization for urban aerosol")
 	flag.Float64Var(&cfg.DeltaSmoke, "delta-smoke", cfg.DeltaSmoke, "aerosol depolarization for smoke aerosol")
 	flag.Float64Var(&cfg.DeltaDust, "delta-dust", cfg.DeltaDust, "aerosol depolarization for dust aerosol")
-	flag.Float64Var(&cfg.VariationCoefficient, "var-coef", cfg.VariationCoefficient, "variation coefficient for aerosol parameters")
+	flag.Float64Var(&cfg.VariationCoefficientDelta, "var-coef-delta", cfg.VariationCoefficientDelta, "variation coefficient for aerosol depolarization")
+	flag.Float64Var(&cfg.VariationCoefficientGf, "var-coef-gf", cfg.VariationCoefficientGf, "variation coefficient for Gf")
 	flag.StringVar(&cfg.InputDir, "input-dir", cfg.InputDir, "input directory")
 	flag.IntVar(&cfg.NumPoints, "num-points", cfg.NumPoints, "number of data points to simulate")
 	flag.BoolVar(&cfg.DoSmooth, "smooth", cfg.DoSmooth, "apply smoothing to the data")

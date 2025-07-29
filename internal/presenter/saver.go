@@ -17,6 +17,7 @@ func SaveDenseToCSV(m *mat.Dense, filename string) error {
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
+	writer.Comma = '\t'
 	defer writer.Flush()
 
 	rows, cols := m.Dims()

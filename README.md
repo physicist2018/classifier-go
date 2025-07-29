@@ -172,3 +172,128 @@ avg_percent: 0.1
 - Изменил решатель на BGFS
 - Добавил сохранение матрицы погрешностей
 - Изменил способ расчета невязки
+
+
+# К вопросу о моделировании синтетических данных
+
+### Система линейных уравнений
+
+$$
+\begin{cases}
+Gf_d \cdot n_d + Gf_u \cdot n_u + Gf_s \cdot n_s = Gf_m \\
+\delta'_d \cdot n_d + \delta'_u \cdot n_u + \delta'_s \cdot n_s = \delta_m \\
+n_d+n_u+n_s = 1
+\end{cases}
+$$
+Подразумевает, что Gf и $\delta'$ различных аэрозольных типов линейно аддитивны, однако это утверждение необходимо проверять:
+
+
+Чтобы выразить $\delta_t$ через $\delta_u$, $\delta_d$ и $\delta_s$, начнём с исходного выражения:
+
+$$
+\delta_t = \frac{\eta_u \beta_s^u + \eta_d \beta_s^d + \eta_s \beta_s^s}{\eta_u \beta_p^u + \eta_d \beta_p^d + \eta_s \beta_p^s}
+$$
+
+Выразим $\beta_s^u$, $\beta_s^d$ и $\beta_s^s$ через $\delta_u$, $\delta_d$ и $\delta_s$:
+
+$$
+\beta_s^u = \delta_u \beta_p^u, \quad \beta_s^d = \delta_d \beta_p^d, \quad \beta_s^s = \delta_s \beta_p^s
+$$
+
+Подставим эти выражения в числитель:
+
+$$
+\delta_t = \frac{\eta_u \delta_u \beta_p^u + \eta_d \delta_d \beta_p^d + \eta_s \delta_s \beta_p^s}{\eta_u \beta_p^u + \eta_d \beta_p^d + \eta_s \beta_p^s}
+$$
+
+Теперь числитель и знаменатель имеют схожую структуру. Если ввести обозначения для весовых коэффициентов:
+
+$$
+w_u = \eta_u \beta_p^u, \quad w_d = \eta_d \beta_p^d, \quad w_s = \eta_s \beta_p^s,
+$$
+
+то формула примет вид:
+
+$$
+\delta_t = \frac{w_u \delta_u + w_d \delta_d + w_s \delta_s}{w_u + w_d + w_s}
+$$
+
+Таким образом, $\delta_t$ является **взвешенным средним** значений $\delta_u$, $\delta_d$ и $\delta_s$ с весами $w_u$, $w_d$ и $w_s$ соответственно.
+
+### Итоговый ответ:
+$$
+\delta_t = \frac{\eta_u \beta_p^u \delta_u + \eta_d \beta_p^d \delta_d + \eta_s \beta_p^s \delta_s}{\eta_u \beta_p^u + \eta_d \beta_p^d + \eta_s \beta_p^s}
+$$
+
+
+Что имеем по $Gf$
+
+$$
+Gf = \frac{\eta_d\beta^f_d+\eta_u\beta^f_u+\eta_s\beta^f_s}{\eta_d\beta^d_{532}+\eta_u\beta^u_{532}+\eta_s\beta^s_{532}}
+$$
+
+ Где
+$$
+Gf_u = \frac{\beta^u_f}{\beta^u_{532}}
+$$
+
+$$
+Gf_d = \frac{\beta^d_f}{\beta^d_{532}}
+$$
+
+$$
+Gf_s = \frac{\beta^s_f}{\beta^s_{532}}
+$$
+
+Чтобы выразить $G_f$ через $Gf_u = \frac{\beta^u_f}{\beta^u_{532}}$, $Gf_d = \frac{\beta^d_f}{\beta^d_{532}}$ и $Gf_s = \frac{\beta^s_f}{\beta^s_{532}}$, подставим эти соотношения в исходное выражение:
+
+$$
+G_f = \frac{\eta_d \beta^f_d + \eta_u \beta^f_u + \eta_s \beta^f_s}{\eta_d \beta^d_{532} + \eta_u \beta^u_{532} + \eta_s \beta^s_{532}}
+$$
+
+Выразим $\beta^f_d$, $\beta^f_u$ и $\beta^f_s$ через $Gf_d$, $Gf_u$ и $Gf_s$:
+
+$$
+\beta^f_d = Gf_d \cdot \beta^d_{532}, \quad \beta^f_u = Gf_u \cdot \beta^u_{532}, \quad \beta^f_s = Gf_s \cdot \beta^s_{532}
+$$
+
+
+Подставим эти выражения в числитель:
+
+$$
+G_f = \frac{\eta_d Gf_d \beta^d_{532} + \eta_u Gf_u \beta^u_{532} + \eta_s Gf_s \beta^s_{532}}{\eta_d \beta^d_{532} + \eta_u \beta^u_{532} + \eta_s \beta^s_{532}}
+$$
+
+Теперь числитель и знаменатель имеют схожую структуру. Если ввести весовые коэффициенты:
+
+$$
+w_d = \eta_d \beta^d_{532}, \quad w_u = \eta_u \beta^u_{532}, \quad w_s = \eta_s \beta^s_{532},
+$$
+
+то формула примет вид:
+
+$$
+G_f = \frac{w_d Gf_d + w_u Gf_u + w_s Gf_s}{w_d + w_u + w_s}
+$$
+
+### Итоговый ответ:
+$$
+G_f = \frac{\eta_d \beta^d_{532} Gf_d + \eta_u \beta^u_{532} Gf_u + \eta_s \beta^s_{532} Gf_s}{\eta_d \beta^d_{532} + \eta_u \beta^u_{532} + \eta_s \beta^s_{532}}
+$$
+
+Это означает, что $G_f$ является **взвешенным средним** значений $Gf_d$, $Gf_u$ и $Gf_s$, где веса определяются произведением коэффициентов $eta$ и соответствующих $\beta_{532}$.
+
+
+Но: $w_d=\eta_d\beta^d_{532}=\eta_d\beta^p_d$,  следовательно система уравнений верна, для $\delta$ и $Gf$, зачем вводить $\delta'$ - пока не понятно.
+
+### Исправленная система уравнений
+
+$$
+\begin{cases}
+Gf_d \cdot n_d + Gf_u \cdot n_u + Gf_s \cdot n_s = Gf_{meas} \\
+\delta_d \cdot n_d + \delta_u \cdot n_u + \delta_s \cdot n_s = \delta_{meas} \\
+n_d+n_u+n_s = 1
+\end{cases}
+$$
+
+Исходя их этих соображений, моделировать тестовые данные как линейную комбинацию аэрозолей заданных типов вполне верно

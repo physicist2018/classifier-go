@@ -136,6 +136,9 @@ func main() {
 	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "Eta_u.pdf"), "Urban aerosol fraction", eta_u)
 	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "Eta_d.pdf"), "Dust aerosol fraction", eta_d)
 	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "Eta_s.pdf"), "Smoke aerosol fraction", eta_s)
+	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "delta_u.pdf"), "Urban aerosol depol", delta_u)
+	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "delta_d.pdf"), "Dust aerosol depol", delta_d)
+	presenter.GenerateHeatmap(filepath.Join(cfg.InputDir, "delta_s.pdf"), "Smoke aerosol depol", delta_s)
 
 	presenter.SaveDenseToCSV(eta_u, filepath.Join(cfg.InputDir, "Eta_u.csv"))
 	presenter.SaveDenseToCSV(eta_d, filepath.Join(cfg.InputDir, "Eta_d.csv"))

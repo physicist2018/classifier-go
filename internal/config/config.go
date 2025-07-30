@@ -5,41 +5,43 @@ import (
 )
 
 type Config struct {
-	GfUrban      float64
-	GfSmoke      float64
-	GfDust       float64
-	DeltaUrban   float64
-	DeltaSmoke   float64
-	DeltaDust    float64
-	VarCoefDelta float64
-	VarCoefGf    float64
-	InputDir     string
-	NumPoints    int
-	DoSmooth     bool
-	SigmaH       int
-	SigmaT       int
-	Size         int
-	AvgPercent   float64
+	GfUrban          float64
+	GfSmoke          float64
+	GfDust           float64
+	DeltaUrban       float64
+	DeltaSmoke       float64
+	DeltaDust        float64
+	VarCoefDelta     float64
+	VarCoefGf        float64
+	InputDir         string
+	NumPoints        int
+	DoSmooth         bool
+	SigmaH           int
+	SigmaT           int
+	Size             int
+	AvgPercent       float64
+	NormalRandomizer bool
 }
 
 func Parse() *Config {
 	// Создаем конфиг с дефолтными значениями
 	cfg := &Config{
-		GfUrban:      0.55e-4,
-		GfSmoke:      4e-4,
-		GfDust:       0.3e-4,
-		DeltaUrban:   0.05,
-		DeltaSmoke:   0.06,
-		DeltaDust:    0.26,
-		VarCoefDelta: 0.1,
-		VarCoefGf:    0.1,
-		InputDir:     "./",
-		NumPoints:    100,
-		DoSmooth:     false,
-		SigmaH:       5,
-		SigmaT:       3,
-		Size:         7,
-		AvgPercent:   0.1,
+		GfUrban:          0.55e-4,
+		GfSmoke:          4e-4,
+		GfDust:           0.3e-4,
+		DeltaUrban:       0.05,
+		DeltaSmoke:       0.06,
+		DeltaDust:        0.26,
+		VarCoefDelta:     0.1,
+		VarCoefGf:        0.1,
+		InputDir:         "./",
+		NumPoints:        100,
+		DoSmooth:         false,
+		SigmaH:           5,
+		SigmaT:           3,
+		Size:             7,
+		AvgPercent:       0.1,
+		NormalRandomizer: false,
 	}
 
 	// Теперь парсим все флаги, которые могут переопределить значения
@@ -63,6 +65,7 @@ func parseFlags(cfg *Config) {
 	pflag.IntVar(&cfg.SigmaH, "sigma-h", cfg.SigmaH, "полуширина окна сглаживания по высоте (отсчеты)")
 	pflag.IntVar(&cfg.SigmaT, "sigma-t", cfg.SigmaT, "полуширина окна сглаживания по времени (отсчеты)")
 	pflag.IntVar(&cfg.Size, "size", cfg.Size, "размер окна сглаживания")
+	pflag.BoolVar(&cfg.NormalRandomizer, "normal-randomizer", cfg.NormalRandomizer, "использовать нормальное распределение для рандомизации")
 	pflag.Float64Var(&cfg.AvgPercent, "avg-percent", cfg.AvgPercent, "персентиль для усреднения данных")
 
 	pflag.Parse()

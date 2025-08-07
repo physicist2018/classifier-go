@@ -1,4 +1,4 @@
-(Release)[https://github.com/physicist2018/classifier-go/releases/tag/v1.8.2]
+
 ### Описание
 
 Программа выполняет классификацию аэрозоля по трем типам:

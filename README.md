@@ -186,6 +186,7 @@ Gf_d \cdot n_d + Gf_u \cdot n_u + Gf_s \cdot n_s = Gf_m \\
 n_d+n_u+n_s = 1
 \end{cases}
 $$
+
 Подразумевает, что Gf и $\delta'$ различных аэрозольных типов линейно аддитивны, однако это утверждение необходимо проверять:
 
 
@@ -222,6 +223,7 @@ $$
 Таким образом, $\delta_t$ является **взвешенным средним** значений $\delta_u$, $\delta_d$ и $\delta_s$ с весами $w_u$, $w_d$ и $w_s$ соответственно.
 
 ### Итоговый ответ:
+
 $$
 \delta_t = \frac{\eta_u \beta_p^u \delta_u + \eta_d \beta_p^d \delta_d + \eta_s \beta_p^s \delta_s}{\eta_u \beta_p^u + \eta_d \beta_p^d + \eta_s \beta_p^s}
 $$

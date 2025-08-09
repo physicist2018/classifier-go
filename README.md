@@ -236,6 +236,7 @@ Gf = \frac{\eta_d\beta^f_d+\eta_u\beta^f_u+\eta_s\beta^f_s}{\eta_d\beta^d_{532}+
 $$
 
  Где
+
 $$
 Gf_u = \frac{\beta^u_f}{\beta^u_{532}}
 $$

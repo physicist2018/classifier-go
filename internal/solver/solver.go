@@ -15,17 +15,21 @@ func SolveWithBounds(A *mat.Dense, b *mat.VecDense, lower, upper []float64) (*ma
 			Ax.MulVec(A, mat.NewVecDense(n, x))
 			var diff mat.VecDense
 			diff.SubVec(&Ax, b)
-			penalty := 0
+			penalty := 0.0
+
+			// Добавляем штраф за выход за границы
 			for i := range len(x) {
 				if x[i] < 0 || x[i] > 1.0 {
 					penalty += 1000
 				}
 			}
-			if floats.Sum(x) > 1.1 {
+
+			// добавляем штраф если сумма всех элементов больше 1.1 и меньше 0.9
+			if floats.Sum(x) > 1.1 || floats.Sum(x) < 0.9 {
 				penalty += 1000
 			}
 
-			return mat.Norm(&diff, 2) + float64(penalty)
+			return mat.Norm(&diff, 2) + penalty
 		},
 	}
 

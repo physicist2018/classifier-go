@@ -31,16 +31,22 @@ func PrepareMatricesA(cfg *config.Config) []*mat.Dense {
 	// Delta distributions
 	deltaSMin := cfg.DeltaSmoke * (1.0 - cfg.VarCoefDelta)
 	deltaSMax := cfg.DeltaSmoke * (1.0 + cfg.VarCoefDelta)
+	deltaSMin = deltaSMin / (1.0 + deltaSMin)
+	deltaSMax = deltaSMax / (1.0 + deltaSMax)
 	genDeltaSmoke := normalboxmueller.NewDistribution(cfg.NormalRandomizer, cfg.DeltaSmoke, (deltaSMax-deltaSMin)/4, deltaSMin, deltaSMax)
 	deltaSs := genDeltaSmoke.RandN(cfg.NumPoints)
 
 	deltaUMin := cfg.DeltaUrban * (1.0 - cfg.VarCoefDelta)
 	deltaUMax := cfg.DeltaUrban * (1.0 + cfg.VarCoefDelta)
+	deltaUMin = deltaUMin / (1.0 + deltaUMin)
+	deltaUMax = deltaUMax / (1.0 + deltaUMax)
 	genDeltaUrban := normalboxmueller.NewDistribution(cfg.NormalRandomizer, cfg.DeltaUrban, (deltaUMax-deltaUMin)/4, deltaUMin, deltaUMax)
 	deltaUs := genDeltaUrban.RandN(cfg.NumPoints)
 
 	deltaDMin := cfg.DeltaDust * (1.0 - cfg.VarCoefDelta)
 	deltaDMax := cfg.DeltaDust * (1.0 + cfg.VarCoefDelta)
+	deltaDMin = deltaDMin / (1.0 + deltaDMin)
+	deltaDMax = deltaDMax / (1.0 + deltaDMax)
 	genDeltaDust := normalboxmueller.NewDistribution(cfg.NormalRandomizer, cfg.DeltaDust, (deltaDMax-deltaDMin)/4, deltaDMin, deltaDMax)
 	deltaDs := genDeltaDust.RandN(cfg.NumPoints)
 

@@ -18,6 +18,8 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+// TODO: Исправить входные данные на delta'
+
 func main() {
 	cfg := config.Parse()
 	log.Println("Starting classifier...")
@@ -69,7 +71,7 @@ func main() {
 			defer wg.Done()
 			for i := range workChan {
 				fmt.Printf("Запуск обработки %d строки из %d\n", i, r)
-				// Обработка первого столбца
+				// Обработка первого столбца - там хранятся отсчеты по высоте
 				errr.Set(i, 0, flMatrix.At(i, 0))
 				eta_d.Set(i, 0, flMatrix.At(i, 0))
 				eta_u.Set(i, 0, flMatrix.At(i, 0))
@@ -83,8 +85,10 @@ func main() {
 
 				// Обработка остальных столбцов
 				for j := 1; j < c; j++ {
-					depMatrix.Set(i, j, depMatrix.At(i, j)/100.0)
-					b := prepare.FormBVector(depMatrix.At(i, j), flMatrix.At(i, j))
+					dephatValue := depMatrix.At(i, j) / 100.0
+					dephatValue = dephatValue / (1.0 + dephatValue)
+					//depMatrix.Set(i, j, dephatValue)
+					b := prepare.FormBVector(dephatValue, flMatrix.At(i, j))
 					solutions := mat.NewDense(cfg.NumPoints, 10, nil)
 
 					for k := range cfg.NumPoints {
@@ -156,9 +160,19 @@ func main() {
 	fmt.Printf("Gf_d   : %.3e\n", avgMatrix(gf_d))
 	fmt.Printf("Gf_u   : %.3e\n", avgMatrix(gf_u))
 	fmt.Printf("Gf_s   : %.3e\n", avgMatrix(gf_s))
-	fmt.Printf("delta_d: %.3f\n", avgMatrix(delta_d))
-	fmt.Printf("delta_u: %.3f\n", avgMatrix(delta_u))
-	fmt.Printf("delta_s: %.3f\n", avgMatrix(delta_s))
+
+	tuned_delta_d := avgMatrix(delta_d)
+	tuned_delta_d = tuned_delta_d / (1.0 - tuned_delta_d)
+
+	tuned_delta_u := avgMatrix(delta_u)
+	tuned_delta_u = tuned_delta_u / (1.0 - tuned_delta_u)
+
+	tuned_delta_s := avgMatrix(delta_s)
+	tuned_delta_s = tuned_delta_s / (1.0 - tuned_delta_s)
+
+	fmt.Printf("delta_d: %.3f\n", tuned_delta_d)
+	fmt.Printf("delta_u: %.3f\n", tuned_delta_u)
+	fmt.Printf("delta_s: %.3f\n", tuned_delta_s)
 }
 
 func smoothMatrix(matrix *mat.Dense, gs *convolve.ConvolveKernel, rows, cols int) {

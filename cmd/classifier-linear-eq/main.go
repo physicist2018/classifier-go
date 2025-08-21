@@ -23,7 +23,9 @@ import (
 func main() {
 	cfg := config.Parse()
 	log.Println("Starting classifier...")
-
+	log.Println("Configuration of the run:")
+	log.Println(cfg.ToString())
+	log.Println("===END===")
 	// Load input matrices
 	flMatrix, err := readmatrix.ReadMatrix(filepath.Join(cfg.InputDir, "FL_cap.txt"))
 	if err != nil {
@@ -44,6 +46,12 @@ func main() {
 
 	Kernels := prepare.PrepareMatricesA(cfg)
 	r, c := flMatrix.Dims()
+
+	for i := range r {
+		for j := 1; j < c; j++ {
+			depMatrix.Set(i, j, depMatrix.At(i, j)/100.0)
+		}
+	}
 
 	// Создаем матрицы для результатов
 	eta_u := mat.NewDense(r, c, nil)
@@ -85,7 +93,7 @@ func main() {
 
 				// Обработка остальных столбцов
 				for j := 1; j < c; j++ {
-					dephatValue := depMatrix.At(i, j) / 100.0
+					dephatValue := depMatrix.At(i, j)
 					dephatValue = dephatValue / (1.0 + dephatValue)
 					//depMatrix.Set(i, j, dephatValue)
 					b := prepare.FormBVector(dephatValue, flMatrix.At(i, j))
